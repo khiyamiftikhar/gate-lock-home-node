@@ -1,0 +1,9 @@
+dependencies:
+  esp-now-comm:
+    path: E:/vscodeespidf/projectworkspace/components-new/esp-now/esp-now-comm
+  discovery_service:
+    path: E:/vscodeespidf/projectworkspace/components-new/esp-now/discovery_service
+  message_service:
+    path: E:/vscodeespidf/projectworkspace/components-new/esp-now/message_service
+  peer-registry:
+    path: E:/vscodeespidf/projectworkspace/components-new/esp-now/peer-registry
