@@ -103,6 +103,7 @@ void app_main(void)
 
     peer_registry_interface_t* peer_registry=peer_registry_init(&registry_config);
     peer_registry->peer_registry_add_peer(GATE_NODE_ID,gate_node_mac,"gatenode");
+    espnow_transport->esp_now_transport_add_peer(gate_node_mac);
 
     if(peer_registry==NULL)
         ESP_LOGI(TAG,"peer registry init failed");
