@@ -26,7 +26,7 @@ static esp_err_t inform_lock_status(lock_status_t status){
 }
     //When command is succesfully sent
 static esp_err_t inform_command_status(bool success){
-    ESP_LOGI(TAG,"command status not implemented");
+    ESP_LOGI(TAG,"command send %d",success);
     return 0;
 
 }
