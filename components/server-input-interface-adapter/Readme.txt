@@ -1,0 +1,1 @@
+This components is the adapter to convert the http-server component to user_input and user_output interfaces
