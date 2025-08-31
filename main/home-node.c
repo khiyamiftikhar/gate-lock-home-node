@@ -16,7 +16,8 @@
 #include "home_node.h"
 #include "user_buttons.h"
 #include "user_output.h"
-
+#include "smartconfig.h"
+#include "server_adapter.h"
 
 
 #define     ESPNOW_CHANNEL          1
@@ -26,6 +27,9 @@
 static const char* TAG="main gate";
 
 const uint8_t gate_node_mac[]={0xe4,0x65,0xb8,0x1b,0x1c,0xd8};
+
+static bool proceed=false;
+
 #define GATE_NODE_ID        2
 
 
@@ -85,13 +89,29 @@ static void esp_flash_init(){
 
 }
 
+void init_espnow(){
+    
+    proceed=true;
+}
+
 void app_main(void)
 {
     esp_flash_init();
-    wifi_init();
-    
+    //wifi_init();
+    wifi_smartconfig_t wifi_cfg={.callback=init_espnow};
 
-    esp_now_transport_config_t transport_config={.wifi_channel=ESPNOW_CHANNEL};
+    initialise_wifi(&wifi_cfg);
+    
+    //Wait until wifi connection is established
+    while(proceed==false){
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
+
+    uint8_t primary;
+    wifi_second_chan_t second;
+    ESP_ERROR_CHECK(esp_wifi_get_channel(&primary, &second));
+    
+    esp_now_transport_config_t transport_config={.wifi_channel=primary};
 
     //The objcts created but callbacks not assigned. will be assigned later
     esp_now_trasnsport_interface_t* espnow_transport=esp_now_transport_init(&transport_config);
@@ -166,26 +186,39 @@ void app_main(void)
     //So now esp_now_comm will invoke methods inside the message service sources
     gate_node_id_interface_t gate_node_id;
     gate_node_id.get_gate_node_mac=get_gate_node_mac;
+    
+    /*
     user_input_config_t user_config={.open_button_gpio_no=5,
                                 .close_button_gpio_no=21,
                                    };
-
+    */
     
-    user_input_interface_t* user_input=user_input_create(&user_config);
+    //user_input_interface_t* user_input=user_input_create(&user_config);
     //user_interaction.inform_command_status=inform_command_status;
     //user_interaction.inform_lock_status=inform_lock_status;
     
-    user_output_interface_t* user_output=user_output_create();
+    //user_output_interface_t* user_output=user_output_create();
+
+
+    user_interaction_config_t interaction_config={ .gate_close_endpoint="/close-gate",
+                                                    .gate_open_endpoint="/open-gate",
+                                                    //.handler=home_node->user_command_callback_handler
+                                                };
+    user_interaction_interface_t* user_interface=user_interaction_create(&interaction_config);
     home_config.gate_node_id=&gate_node_id;
     home_config.msg_interface=&msg_interface;
-    home_config.user_output=user_output;
+    home_config.user_output=&user_interface->user_output;
 
     home_node_service_interface* home_node= home_node_service_create(&home_config);
+    
+    user_interface->register_user_command_callback(home_node->user_command_callback_handler);
+    
+    
 
     espnow_transport->callbacks.on_data_received=home_node->msg_received_handler;
     espnow_transport->callbacks.on_send_done=home_node->msg_sent_handler;
     ESP_LOGI(TAG,"before register");
-    user_input->register_callback(home_node->user_command_callback_handler);
+    //user_input->register_callback(home_node->user_command_callback_handler);
     ESP_LOGI(TAG,"after register");
 
 
