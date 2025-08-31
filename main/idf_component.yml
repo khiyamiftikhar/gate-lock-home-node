@@ -7,3 +7,5 @@ dependencies:
     path: E:/vscodeespidf/projectworkspace/components-new/esp-now/message_service
   peer-registry:
     path: E:/vscodeespidf/projectworkspace/components-new/esp-now/peer-registry
+  wifi-smartconfig:
+    git: https://github.com/khiyamiftikhar/wifi-smartconfig
