@@ -143,6 +143,7 @@ void app_main(void)
     discovery_comm_interface.acknowledge_the_discovery=espnow_transport->esp_now_transport_send_discovery_ack;
     discovery_comm_interface.add_peer=espnow_transport->esp_now_transport_add_peer;
     discovery_comm_interface.send_discovery=espnow_transport->esp_now_transport_send_discovery;
+    discovery_comm_interface.process_discovery_completion_callback=NULL;
 
     //Assign the discovery interface to the discovery member of discovery config
     discovery_config.discovery=&discovery_comm_interface;
