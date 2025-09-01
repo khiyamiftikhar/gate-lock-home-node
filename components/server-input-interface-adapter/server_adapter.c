@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdbool.h>
+#include "esp_timer.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -35,19 +36,28 @@ static esp_err_t inform_command_status(bool success){
 
 }
 
-static bool get_from_queue(){
-    bool success;
-    xQueueReceive(user_interaction.response_queue,&success,portMAX_DELAY);
-    ESP_LOGI(TAG,"received from queue %d",success);
-    return success;
+static BaseType_t get_from_queue(TickType_t wait_time,bool* success){
+    
+    BaseType_t ret=xQueueReceive(user_interaction.response_queue,success,wait_time);
+    ESP_LOGI(TAG,"received from queue %d",*success);
+    return ret;
 }
 
 static void gate_close_request_handler(http_request_t* request,const char* uri){
-    esp_err_t ret=0;
+    BaseType_t ret=pdTRUE;
  
-    ret=user_interaction.command_handler(USER_COMMAND_LOCK_CLOSE);
+    //Keep reading from queue until it is free from previous entries
+    bool success;
+    while(ret==pdTRUE){
+        ret=get_from_queue(0,&success);      //0 wait time
+    }
     
-    bool success=get_from_queue();      //blocking call untill the espnow send callback pushes to queue
+    //Now send new command. The data that will arrive in queue now belongs to this request
+    esp_err_t err=0;
+    err=user_interaction.command_handler(USER_COMMAND_LOCK_CLOSE);
+    
+    
+    get_from_queue(portMAX_DELAY,&success);      //blocking call untill the espnow send callback pushes to queue
 
     if(success)
         user_interaction.server_interface->send_response(request,"Gate Closed");
@@ -62,10 +72,20 @@ static void gate_close_request_handler(http_request_t* request,const char* uri){
 static void gate_open_request_handler(http_request_t* request,const char* uri){
     
     
-    esp_err_t ret=user_interaction.command_handler(USER_COMMAND_LOCK_OPEN);
-
+    BaseType_t ret=pdTRUE;
+ 
+    //Keep reading from queue until it is free from previous entries
+    bool success;
+    while(ret==pdTRUE){
+        ret=get_from_queue(0,&success);      //0 wait time
+    }
     
-    bool success=get_from_queue();      //blocking call untill the espnow send callback pushes to queue
+    //Now send new command. The data that will arrive in queue now belongs to this request
+    esp_err_t err=0;
+    err=user_interaction.command_handler(USER_COMMAND_LOCK_OPEN);
+    
+    
+    get_from_queue(portMAX_DELAY,&success);      //blocking call untill the espnow send callback pushes to queue
 
     if(success)
         user_interaction.server_interface->send_response(request,"Gate Opened");
