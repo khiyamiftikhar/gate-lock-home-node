@@ -2,4 +2,5 @@ dependencies:
   espressif/button:
     version: "*"
   message_service:
-    path: E:/vscodeespidf/projectworkspace/components-new/esp-now/message_service
+    git: https://github.com/khiyamiftikhar/espnow-components
+    path: message_service
