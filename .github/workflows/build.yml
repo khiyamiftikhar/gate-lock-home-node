@@ -1,0 +1,39 @@
+name: ESP-IDF CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build for ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [esp32, esp32c3]
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Install ESP-IDF
+        uses: esp-rs/esp-idf-action@v1
+        with:
+          esp_idf_version: v5.2.1
+          target: ${{ matrix.target }}
+          
+      - name: Build project
+        run: |
+          idf.py set-target ${{ matrix.target }}
+          idf.py build
+        
+      - name: Archive firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-firmware
+          path: build/
+          retention-days: 7
