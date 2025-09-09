@@ -28,9 +28,11 @@ jobs:
 
       - name: Build project
         run: |
-          mkdir build_${{ matrix.target }}
-          cd build_${{ matrix.target }}
-          idf.py -B . -DIDF_TARGET=${{ matrix.target }} build
+          mkdir -p build_${{ matrix.target }}
+          idf.py -B build_${{ matrix.target }} \
+            -DIDF_TARGET=${{ matrix.target }} \
+            -DSDKCONFIG=sdkconfig.${{ matrix.target }} \
+            build
 
       - name: Archive firmware
         uses: actions/upload-artifact@v4
