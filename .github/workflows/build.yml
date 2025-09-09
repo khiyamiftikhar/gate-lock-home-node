@@ -25,6 +25,7 @@ jobs:
         with:
           esp_idf_version: v5.4.2
           target: ${{ matrix.target }}
+          skip_build: true
 
       - name: Build project
         run: |
