@@ -1,4 +1,5 @@
 name: ESP-IDF CI
+
 on:
   push:
     branches:
@@ -14,37 +15,22 @@ jobs:
     strategy:
       matrix:
         target: [esp32, esp32c3]
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        
+
       - name: Install ESP-IDF
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.4.2
           target: ${{ matrix.target }}
-      
-      - name: Clean existing sdkconfig
-        run: |
-          rm -f sdkconfig
-          
-      - name: Prepare sdkconfig
-        run: |
-          if [ -f "sdkconfig.${{ matrix.target }}" ]; then
-            echo "Restoring sdkconfig.${{ matrix.target }}"
-            cp sdkconfig.${{ matrix.target }} sdkconfig
-          else
-            echo "No sdkconfig.${{ matrix.target }} found, will generate new one"
-          fi
 
       - name: Build project
         run: |
-          idf.py -B build_${{ matrix.target }} build
-
-      - name: Save sdkconfig for this target
-        run: |
-          cp sdkconfig sdkconfig.${{ matrix.target }}
+          mkdir build_${{ matrix.target }}
+          cd build_${{ matrix.target }}
+          idf.py -B . -DIDF_TARGET=${{ matrix.target }} build
 
       - name: Archive firmware
         uses: actions/upload-artifact@v4
