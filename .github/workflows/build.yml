@@ -24,7 +24,11 @@ jobs:
         with:
           esp_idf_version: v5.4.2
           target: ${{ matrix.target }}
-
+      
+      - name: Clean existing sdkconfig
+        run: |
+          rm -f sdkconfig
+          
       - name: Prepare sdkconfig
         run: |
           if [ -f "sdkconfig.${{ matrix.target }}" ]; then
@@ -33,14 +37,6 @@ jobs:
           else
             echo "No sdkconfig.${{ matrix.target }} found, will generate new one"
           fi
-
-      - name: Set target
-        run: |
-          idf.py set-target ${{ matrix.target }}
-
-      - name: Clean build folder
-        run: |
-          idf.py -B build_${{ matrix.target }} fullclean
 
       - name: Build project
         run: |
