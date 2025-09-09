@@ -1,5 +1,4 @@
 name: ESP-IDF CI
-
 on:
   push:
     branches:
@@ -25,15 +24,29 @@ jobs:
         with:
           esp_idf_version: v5.4.2
           target: ${{ matrix.target }}
-          
+
+      - name: Prepare sdkconfig
+        run: |
+          # If a saved sdkconfig for this target exists, use it
+          if [ -f "sdkconfig.${{ matrix.target }}" ]; then
+            echo "Restoring sdkconfig.${{ matrix.target }}"
+            cp sdkconfig.${{ matrix.target }} sdkconfig
+          else
+            echo "No sdkconfig.${{ matrix.target }} found, will generate new one"
+          fi
+
       - name: Build project
         run: |
           idf.py set-target ${{ matrix.target }}
-          idf.py build
-        
+          idf.py -B build_${{ matrix.target }} build
+
+      - name: Save sdkconfig for this target
+        run: |
+          cp sdkconfig sdkconfig.${{ matrix.target }}
+
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}-firmware
-          path: build/
+          path: build_${{ matrix.target }}/
           retention-days: 7
