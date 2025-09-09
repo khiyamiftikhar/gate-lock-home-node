@@ -1,5 +1,4 @@
 name: ESP-IDF CI
-
 on:
   push:
     branches:
@@ -21,19 +20,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install ESP-IDF
-        uses: espressif/esp-idf-ci-action@v1
+        uses: espressif/install-esp-idf-action@v1
         with:
-          esp_idf_version: v5.4.2
-          target: ${{ matrix.target }}
-          skip_build: true
+          version: v5.4.2
 
       - name: Build project
         run: |
-          mkdir -p build_${{ matrix.target }}
           idf.py -B build_${{ matrix.target }} \
-            -DIDF_TARGET=${{ matrix.target }} \
-            -DSDKCONFIG=sdkconfig.${{ matrix.target }} \
-            build
+                 -DIDF_TARGET=${{ matrix.target }} \
+                 -DSDKCONFIG=sdkconfig.${{ matrix.target }} \
+                 build
 
       - name: Archive firmware
         uses: actions/upload-artifact@v4
