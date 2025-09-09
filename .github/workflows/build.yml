@@ -27,7 +27,6 @@ jobs:
 
       - name: Prepare sdkconfig
         run: |
-          # If a saved sdkconfig for this target exists, use it
           if [ -f "sdkconfig.${{ matrix.target }}" ]; then
             echo "Restoring sdkconfig.${{ matrix.target }}"
             cp sdkconfig.${{ matrix.target }} sdkconfig
@@ -35,9 +34,16 @@ jobs:
             echo "No sdkconfig.${{ matrix.target }} found, will generate new one"
           fi
 
-      - name: Build project
+      - name: Set target
         run: |
           idf.py set-target ${{ matrix.target }}
+
+      - name: Clean build folder
+        run: |
+          idf.py -B build_${{ matrix.target }} fullclean
+
+      - name: Build project
+        run: |
           idf.py -B build_${{ matrix.target }} build
 
       - name: Save sdkconfig for this target
