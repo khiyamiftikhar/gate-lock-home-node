@@ -6,6 +6,10 @@ on:
   pull_request:
     branches:
       - main
+
+env:
+  IDF_VERSION: v5.4.2
+
 jobs:
   build:
     name: Build for ${{ matrix.target }}
@@ -16,68 +20,150 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
+        with:
+          submodules: recursive
+     
+      # More specific ESP-IDF cache - only depends on IDF version
       - name: Cache ESP-IDF
+        id: cache-esp-idf
         uses: actions/cache@v4
         with:
           path: |
             ~/.espressif
             ~/esp/esp-idf
-          key: esp-idf-${{ runner.os }}-v5.4.2-${{ hashFiles('**/CMakeLists.txt', '**/Kconfig*') }}
+          key: esp-idf-${{ runner.os }}-${{ env.IDF_VERSION }}
           restore-keys: |
-            esp-idf-${{ runner.os }}-v5.4.2-
+            esp-idf-${{ runner.os }}-
+
+      # More specific build cache with target-specific dependencies
       - name: Cache build output
+        id: cache-build
         uses: actions/cache@v4
         with:
-          path: build_${{ matrix.target }}
-          key: build-${{ matrix.target }}-${{ hashFiles('**/*.c', '**/*.h', '**/CMakeLists.txt', '**/sdkconfig*') }}
+          path: |
+            build_${{ matrix.target }}
+            sdkconfig.${{ matrix.target }}
+          key: build-${{ matrix.target }}-${{ env.IDF_VERSION }}-${{ hashFiles('main/**/*.c', 'main/**/*.h', 'components/**/*.c', 'components/**/*.h', 'CMakeLists.txt', 'main/CMakeLists.txt', 'components/**/CMakeLists.txt', 'sdkconfig.${{ matrix.target }}') }}
           restore-keys: |
+            build-${{ matrix.target }}-${{ env.IDF_VERSION }}-
             build-${{ matrix.target }}-
+
+      # Debug cache status
+      - name: Check cache status
+        run: |
+          echo "ESP-IDF cache hit: ${{ steps.cache-esp-idf.outputs.cache-hit }}"
+          echo "Build cache hit: ${{ steps.cache-build.outputs.cache-hit }}"
+          echo "ESP-IDF path exists: $(test -d ~/esp/esp-idf && echo 'yes' || echo 'no')"
+          echo "Build path exists: $(test -d build_${{ matrix.target }} && echo 'yes' || echo 'no')"
+
+      # Only install ESP-IDF if not cached
       - name: Install ESP-IDF
+        if: steps.cache-esp-idf.outputs.cache-hit != 'true'
         uses: espressif/install-esp-idf-action@v1
         with:
-          version: v5.4.2
-      
+          version: ${{ env.IDF_VERSION }}
+          target: ${{ matrix.target }}
+
+      # Set up ESP-IDF environment if it was cached
+      - name: Setup ESP-IDF environment
+        if: steps.cache-esp-idf.outputs.cache-hit == 'true'
+        run: |
+          echo "Setting up cached ESP-IDF environment"
+          echo "$HOME/esp/esp-idf/tools:$PATH" >> $GITHUB_PATH
+          echo "IDF_PATH=$HOME/esp/esp-idf" >> $GITHUB_ENV
+          echo "IDF_TOOLS_PATH=$HOME/.espressif" >> $GITHUB_ENV
+          # Source the export script to set up environment
+          source $HOME/esp/esp-idf/export.sh
+
+      # Alternative environment setup method
+      - name: Source ESP-IDF environment
+        run: |
+          if [ -f "$HOME/esp/esp-idf/export.sh" ]; then
+            source $HOME/esp/esp-idf/export.sh
+          else
+            echo "ESP-IDF not found in expected location"
+            exit 1
+          fi
+          # Verify ESP-IDF is working
+          idf.py --version
+     
+      # Clean build if source files changed significantly
+      - name: Clean build if needed
+        if: steps.cache-build.outputs.cache-hit != 'true'
+        run: |
+          if [ -d "build_${{ matrix.target }}" ]; then
+            echo "Cleaning existing build directory"
+            rm -rf build_${{ matrix.target }}
+          fi
+
       - name: Build project
         run: |
-          idf.py -B build_${{ matrix.target }} \
-                 -DIDF_TARGET=${{ matrix.target }} \
-                 -DSDKCONFIG=sdkconfig.${{ matrix.target }} \
-                 build
-      
+          # Ensure we're using the right environment
+          source $HOME/esp/esp-idf/export.sh
+          
+          # Set target before building
+          idf.py set-target ${{ matrix.target }}
+          
+          # Use target-specific sdkconfig if it exists
+          if [ -f "sdkconfig.${{ matrix.target }}" ]; then
+            cp sdkconfig.${{ matrix.target }} sdkconfig
+          fi
+          
+          # Build with specific build directory
+          idf.py -B build_${{ matrix.target }} build
+     
       - name: Create firmware package
         run: |
           mkdir -p firmware_${{ matrix.target }}
-          
-          # Copy top-level project file so idf.py flash works
+         
+          # Copy project files for flashing
           cp CMakeLists.txt firmware_${{ matrix.target }}/
+          if [ -f "sdkconfig.${{ matrix.target }}" ]; then
+            cp sdkconfig.${{ matrix.target }} firmware_${{ matrix.target }}/sdkconfig
+          fi
+          
           # Copy essential firmware files
-          cp build_${{ matrix.target }}/*.bin firmware_${{ matrix.target }}/
+          cp build_${{ matrix.target }}/*.bin firmware_${{ matrix.target }}/ 2>/dev/null || echo "No .bin files found"
+          cp build_${{ matrix.target }}/*.elf firmware_${{ matrix.target }}/ 2>/dev/null || echo "No .elf files found"
           
-          #because monitor showed checksum mismatch between flashed and built app
-          cp build_${{ matrix.target }}/*.elf firmware_${{ matrix.target }}/
           # Copy partition table
-          cp build_${{ matrix.target }}/partition_table/partition-table.bin firmware_${{ matrix.target }}/
-          
-          
+          if [ -f "build_${{ matrix.target }}/partition_table/partition-table.bin" ]; then
+            cp build_${{ matrix.target }}/partition_table/partition-table.bin firmware_${{ matrix.target }}/
+          fi
+         
           # Copy bootloader
-          cp build_${{ matrix.target }}/bootloader/bootloader.bin firmware_${{ matrix.target }}/
-          
-          # Copy flash arguments file (contains addresses and parameters)
-          cp build_${{ matrix.target }}/flash_args firmware_${{ matrix.target }}/ || echo "flash_args not found, skipping"
-          cp build_${{ matrix.target }}/flasher_args.json firmware_${{ matrix.target }}/ || echo "flasher_args.json not found, skipping"
-          
-          # Copy project info for your Python script
-          cp build_${{ matrix.target }}/project_description.json firmware_${{ matrix.target }}/ || echo "project_description.json not found, skipping"
-          
-          # Create a flash info file for your Python script
-          echo "target=${{ matrix.target }}" > firmware_${{ matrix.target }}/flash_info.txt
-          echo "idf_version=v5.4.2" >> firmware_${{ matrix.target }}/flash_info.txt
-          echo "build_time=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> firmware_${{ matrix.target }}/flash_info.txt
-      
+          if [ -f "build_${{ matrix.target }}/bootloader/bootloader.bin" ]; then
+            cp build_${{ matrix.target }}/bootloader/bootloader.bin firmware_${{ matrix.target }}/
+          fi
+         
+          # Copy flash configuration files
+          cp build_${{ matrix.target }}/flash_args firmware_${{ matrix.target }}/ 2>/dev/null || echo "flash_args not found"
+          cp build_${{ matrix.target }}/flasher_args.json firmware_${{ matrix.target }}/ 2>/dev/null || echo "flasher_args.json not found"
+          cp build_${{ matrix.target }}/project_description.json firmware_${{ matrix.target }}/ 2>/dev/null || echo "project_description.json not found"
+         
+          # Create flash info file
+          {
+            echo "target=${{ matrix.target }}"
+            echo "idf_version=${{ env.IDF_VERSION }}"
+            echo "build_time=$(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+            echo "cache_hit_esp_idf=${{ steps.cache-esp-idf.outputs.cache-hit }}"
+            echo "cache_hit_build=${{ steps.cache-build.outputs.cache-hit }}"
+          } > firmware_${{ matrix.target }}/flash_info.txt
+     
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}-firmware
           path: firmware_${{ matrix.target }}/
           retention-days: 7
+
+      # Optional: Save build logs for debugging
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-${{ matrix.target }}
+          path: |
+            build_${{ matrix.target }}/build.log
+            build_${{ matrix.target }}/compile_commands.json
+          retention-days: 3
