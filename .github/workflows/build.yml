@@ -49,6 +49,8 @@ jobs:
           # Copy partition table
           cp build_${{ matrix.target }}/partition_table/partition-table.bin firmware_${{ matrix.target }}/
           
+          #project level CMake
+          cp CMakeLists.txt firmware_${{ matrix.target }}/
           # Copy bootloader
           cp build_${{ matrix.target }}/bootloader/bootloader.bin firmware_${{ matrix.target }}/
           
