@@ -62,7 +62,6 @@ jobs:
         uses: espressif/install-esp-idf-action@v1
         with:
           version: ${{ env.IDF_VERSION }}
-          target: ${{ matrix.target }}
 
       # Set up ESP-IDF environment if it was cached
       - name: Setup ESP-IDF environment
