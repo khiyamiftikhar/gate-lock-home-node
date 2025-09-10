@@ -225,22 +225,31 @@ def flash_with_idf(port, chip, build_path, baud=460800):
     env = os.environ.copy()
     env['IDF_TARGET'] = chip
     
-    # Build the idf.py flash command
+    ##new parsing of flasher_Args.json code
+    flasher_args_file = build_path / "flasher_args.json"
+
+    with open(flasher_args_file, "r") as f:
+        flasher_args = json.load(f)
+
+    # Start command
     esptool_cmd = [
-    sys.executable, "-m",
-    "esptool",
-    "--chip", chip,
-    "--port", port,
-    "--baud", "460800",
-    "write_flash", "@flasher_args.json"
-]
-    #subprocess.run(esptool_cmd, check=True, cwd=build_path)
-    #command = [
-     #   "idf.py", 
-      #  '-p', port,
-       # '-b', str(baud),
-      #  'flash'
-    #]
+        sys.executable, "-m", "esptool",
+        "--chip", chip,
+        "--port", port,
+        "--baud", "460800",
+        "write_flash",
+        "--flash_mode", flasher_args["flash_settings"]["flash_mode"],
+        "--flash_freq", flasher_args["flash_settings"]["flash_freq"],
+        "--flash_size", flasher_args["flash_settings"]["flash_size"],
+    ]
+
+# Add file mappings
+    for addr, file in flasher_args["flash_files"].items():
+        esptool_cmd.extend([addr, file])
+
+    print("Command:", " ".join(esptool_cmd))
+
+
     
     print(f"\nFlashing {chip} firmware to {port} using pytool...")
     print(f"Build directory: {build_path}")
@@ -249,14 +258,8 @@ def flash_with_idf(port, chip, build_path, baud=460800):
     
     try:
         # Run from the build directory
-        result=subprocess.run(esptool_cmd, check=True, cwd=build_path.parent,env=env)
-        #result = subprocess.run(
-         #   command, 
-          #  cwd=str(build_path.parent), 
-           # env=env,
-           # shell=True,
-           # check=True
-        #)
+        result=subprocess.run(esptool_cmd, check=True, cwd=build_path, env=env)
+        
         print("Flashing complete! ✨")
         return True
     except subprocess.CalledProcessError as e:
@@ -280,7 +283,7 @@ def monitor_device(port, chip):
     
     print(f"Starting monitor on {port}. Press Ctrl+] to exit.")
     try:
-        subprocess.run(['idf.py', '-p', port, 'monitor'], env=env)
+        subprocess.run(['idf.py', '-p', port, 'monitor'], env=env,shell=True)
     except KeyboardInterrupt:
         print("\nMonitor stopped.")
     except FileNotFoundError:
