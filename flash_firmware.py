@@ -226,27 +226,37 @@ def flash_with_idf(port, chip, build_path, baud=460800):
     env['IDF_TARGET'] = chip
     
     # Build the idf.py flash command
-    command = [
-        "idf.py", 
-        '-p', port,
-        '-b', str(baud),
-        'flash'
-    ]
+    esptool_cmd = [
+    sys.executable, "-m",
+    "esptool",
+    "--chip", chip,
+    "--port", port,
+    "--baud", "460800",
+    "write_flash", "@flasher_args.json"
+]
+    #subprocess.run(esptool_cmd, check=True, cwd=build_path)
+    #command = [
+     #   "idf.py", 
+      #  '-p', port,
+       # '-b', str(baud),
+      #  'flash'
+    #]
     
-    print(f"\nFlashing {chip} firmware to {port} using idf.py...")
+    print(f"\nFlashing {chip} firmware to {port} using pytool...")
     print(f"Build directory: {build_path}")
     print(f"Main firmware: {[f.name for f in main_bins]}")
-    print(f"Command: {' '.join(command)}")
+    print(f"Command: {' '.join(esptool_cmd)}")
     
     try:
         # Run from the build directory
-        result = subprocess.run(
-            command, 
-            cwd=str(build_path.parent), 
-            env=env,
-            shell=True,
-            check=True
-        )
+        result=subprocess.run(esptool_cmd, check=True, cwd=build_path.parent,env=env)
+        #result = subprocess.run(
+         #   command, 
+          #  cwd=str(build_path.parent), 
+           # env=env,
+           # shell=True,
+           # check=True
+        #)
         print("Flashing complete! ✨")
         return True
     except subprocess.CalledProcessError as e:
