@@ -26,7 +26,13 @@ jobs:
           key: esp-idf-${{ runner.os }}-v5.4.2-${{ hashFiles('**/CMakeLists.txt', '**/Kconfig*') }}
           restore-keys: |
             esp-idf-${{ runner.os }}-v5.4.2-
-
+      - name: Cache build output
+        uses: actions/cache@v4
+        with:
+          path: build_${{ matrix.target }}
+          key: build-${{ matrix.target }}-${{ hashFiles('**/*.c', '**/*.h', '**/CMakeLists.txt', '**/sdkconfig*') }}
+          restore-keys: |
+            build-${{ matrix.target }}-
       - name: Install ESP-IDF
         uses: espressif/install-esp-idf-action@v1
         with:
@@ -50,6 +56,7 @@ jobs:
           
           # Copy partition table
           cp build_${{ matrix.target }}/partition_table/partition-table.bin firmware_${{ matrix.target }}/
+          
           
           # Copy bootloader
           cp build_${{ matrix.target }}/bootloader/bootloader.bin firmware_${{ matrix.target }}/
