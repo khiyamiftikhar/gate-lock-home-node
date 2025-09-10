@@ -17,6 +17,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       
+      - name: Cache ESP-IDF
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.espressif
+            ~/esp/esp-idf
+          key: esp-idf-${{ runner.os }}-v5.4.2-${{ hashFiles('**/CMakeLists.txt', '**/Kconfig*') }}
+          restore-keys: |
+            esp-idf-${{ runner.os }}-v5.4.2-
+
       - name: Install ESP-IDF
         uses: espressif/install-esp-idf-action@v1
         with:
