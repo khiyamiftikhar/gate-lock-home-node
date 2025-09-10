@@ -151,6 +151,10 @@ def recreate_build_structure_from_flat(flat_dir):
         elif filename == 'flash_info.txt':
             # Our custom info file goes to build root
             dest_path = build_path / filename
+        
+        elif filename.endswith('.elf'):
+        # Main ELF file goes to build root
+            dest_path = build_path / filename
             
         else:
             # Unknown files go to build root
@@ -283,7 +287,7 @@ def monitor_device(port, chip):
     
     print(f"Starting monitor on {port}. Press Ctrl+] to exit.")
     try:
-        subprocess.run(['idf.py', '-p', port, 'monitor'], env=env,shell=True)
+        subprocess.run(['idf.py', '-p', port, '-B', str(build_path), 'monitor'], env=env, shell=True)
     except KeyboardInterrupt:
         print("\nMonitor stopped.")
     except FileNotFoundError:
