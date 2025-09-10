@@ -54,6 +54,8 @@ jobs:
           # Copy essential firmware files
           cp build_${{ matrix.target }}/*.bin firmware_${{ matrix.target }}/
           
+          #because monitor showed checksum mismatch between flashed and built app
+          cp build_${{ matrix.target }}/*.elf firmware_${{ matrix.target }}/
           # Copy partition table
           cp build_${{ matrix.target }}/partition_table/partition-table.bin firmware_${{ matrix.target }}/
           
