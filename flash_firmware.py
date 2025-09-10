@@ -1,3 +1,4 @@
+import sys
 import os
 import subprocess
 import argparse
@@ -73,14 +74,14 @@ def download_latest_artifact(repo_url, artifact_name, token=None, output_dir="./
                 response = requests.get(download_url, headers=headers)
                 response.raise_for_status()
                 
-                # Save and extract
+                # Save and extract with proper build structure
                 os.makedirs(output_dir, exist_ok=True)
                 zip_path = Path(output_dir) / f"{artifact_name}.zip"
                 
                 with open(zip_path, 'wb') as f:
                     f.write(response.content)
                 
-                # Extract the zip
+                # Extract and restructure for ESP-IDF
                 extract_path = Path(output_dir) / artifact_name
                 if extract_path.exists():
                     shutil.rmtree(extract_path)
@@ -88,9 +89,12 @@ def download_latest_artifact(repo_url, artifact_name, token=None, output_dir="./
                 with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                     zip_ref.extractall(extract_path)
                 
-                print(f"Downloaded and extracted to: {extract_path}")
+                # Now recreate proper build structure
+                build_path = recreate_build_structure_from_flat(extract_path)
+                
+                print(f"Downloaded and extracted to: {build_path}")
                 os.remove(zip_path)  # Clean up zip file
-                return str(extract_path)
+                return str(build_path)
         
         print(f"Artifact '{artifact_name}' not found in recent successful runs")
         return None
@@ -103,15 +107,118 @@ def download_latest_artifact(repo_url, artifact_name, token=None, output_dir="./
             print(f"Error downloading artifact: {e}")
         return None
 
+def recreate_build_structure_from_flat(flat_dir):
+    """
+    Take flat extracted firmware files and recreate ESP-IDF build directory structure
+    """
+    flat_path = Path(flat_dir)
+    build_path = flat_path / "build"
+    
+    # Clean and create build directory
+    if build_path.exists():
+        shutil.rmtree(build_path)
+    build_path.mkdir(parents=True, exist_ok=True)
+    
+    print(f"Recreating build structure from: {flat_path}")
+    
+    # List all files in flat directory
+    flat_files = [f for f in flat_path.iterdir() if f.is_file()]
+    print(f"Found {len(flat_files)} files to organize")
+    
+    # Process each file and place it in correct location
+    for file_path in flat_files:
+        filename = file_path.name
+        
+        # Determine correct placement based on filename
+        if filename == "bootloader.bin":
+            dest_dir = build_path / "bootloader"
+            dest_dir.mkdir(exist_ok=True)
+            dest_path = dest_dir / filename
+            
+        elif filename == "partition-table.bin":
+            dest_dir = build_path / "partition_table"
+            dest_dir.mkdir(exist_ok=True)
+            dest_path = dest_dir / filename
+            
+        elif filename.endswith('.bin') and filename not in ['bootloader.bin', 'partition-table.bin']:
+            # Main firmware binary goes to build root
+            dest_path = build_path / filename
+            
+        elif filename in ['flash_args', 'flasher_args.json', 'project_description.json']:
+            # Configuration files go to build root
+            dest_path = build_path / filename
+            
+        elif filename == 'flash_info.txt':
+            # Our custom info file goes to build root
+            dest_path = build_path / filename
+            
+        else:
+            # Unknown files go to build root
+            print(f"Unknown file type: {filename}, placing in build root")
+            dest_path = build_path / filename
+        
+        # Copy the file
+        shutil.copy2(file_path, dest_path)
+        print(f"  {filename} -> {dest_path.relative_to(flat_path)}")
+    
+    # Verify we have essential files
+    essential_files = [
+        build_path / "bootloader" / "bootloader.bin",
+        build_path / "partition_table" / "partition-table.bin"
+    ]
+    
+    main_bin_files = list(build_path.glob("*.bin"))
+    main_bin_files = [f for f in main_bin_files if not f.name.startswith(('bootloader', 'partition'))]
+    
+    print(f"\nBuild structure verification:")
+    for essential in essential_files:
+        status = "✓" if essential.exists() else "✗"
+        print(f"  {status} {essential.relative_to(flat_path)}")
+    
+    if main_bin_files:
+        print(f"  ✓ Main firmware: {[f.name for f in main_bin_files]}")
+    else:
+        print(f"  ✗ No main firmware .bin file found!")
+    
+    # Check for flash configuration
+    flash_config_files = ['flash_args', 'flasher_args.json']
+    for config_file in flash_config_files:
+        config_path = build_path / config_file
+        status = "✓" if config_path.exists() else "✗"
+        print(f"  {status} {config_file}")
+    
+    return str(build_path)
+
 def flash_with_idf(port, chip, build_path, baud=460800):
     """Flash firmware using idf.py (ESP-IDF way)"""
     
     build_path = Path(build_path).resolve()
     
-    # Check if this looks like a build directory
-    if not (build_path / 'bootloader').exists() and not any(build_path.glob('*.bin')):
-        print(f"Error: {build_path} doesn't look like an ESP-IDF build directory")
-        print("Expected to find bootloader/ directory or .bin files")
+    # Check if this looks like a proper ESP-IDF build directory
+    required_structure = [
+        build_path / "bootloader" / "bootloader.bin",
+        build_path / "partition_table" / "partition-table.bin"
+    ]
+    
+    main_bins = list(build_path.glob("*.bin"))
+    main_bins = [f for f in main_bins if not f.name.startswith(('bootloader', 'partition'))]
+    
+    missing_files = [f for f in required_structure if not f.exists()]
+    
+    if missing_files or not main_bins:
+        print(f"Error: {build_path} doesn't have proper ESP-IDF build structure")
+        print("Missing files:")
+        for missing in missing_files:
+            print(f"  - {missing}")
+        if not main_bins:
+            print(f"  - Main firmware .bin file")
+        print("\nExpected structure:")
+        print("  build/")
+        print("    ├── bootloader/")
+        print("    │   └── bootloader.bin")
+        print("    ├── partition_table/")
+        print("    │   └── partition-table.bin")
+        print("    └── [project_name].bin")
         return False
     
     # Set target for idf.py
@@ -120,22 +227,24 @@ def flash_with_idf(port, chip, build_path, baud=460800):
     
     # Build the idf.py flash command
     command = [
-        'idf.py', 
+        "idf.py", 
         '-p', port,
         '-b', str(baud),
         'flash'
     ]
     
-    print(f"Flashing {chip} firmware to {port} using idf.py...")
+    print(f"\nFlashing {chip} firmware to {port} using idf.py...")
     print(f"Build directory: {build_path}")
+    print(f"Main firmware: {[f.name for f in main_bins]}")
     print(f"Command: {' '.join(command)}")
     
     try:
         # Run from the build directory
         result = subprocess.run(
             command, 
-            cwd=str(build_path), 
+            cwd=str(build_path.parent), 
             env=env,
+            shell=True,
             check=True
         )
         print("Flashing complete! ✨")
@@ -146,9 +255,12 @@ def flash_with_idf(port, chip, build_path, baud=460800):
         print("1. Make sure the device is connected and drivers are installed")
         print("2. Try a different baud rate with --baud parameter")
         print("3. Put the device in download mode (hold BOOT button while pressing RESET)")
+        print("4. Check if idf.py can detect the chip: idf.py -p [PORT] flash")
         return False
     except FileNotFoundError:
         print("Error: idf.py not found. Make sure you're running from ESP-IDF terminal.")
+        print("On Windows: Use 'ESP-IDF Command Prompt'")
+        print("On Linux/Mac: Source the ESP-IDF environment: . ~/esp/esp-idf/export.sh")
         return False
 
 def monitor_device(port, chip):
