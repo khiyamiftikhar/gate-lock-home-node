@@ -43,6 +43,8 @@ jobs:
         run: |
           mkdir -p firmware_${{ matrix.target }}
           
+          # Copy top-level project file so idf.py flash works
+          cp CMakeLists.txt firmware_${{ matrix.target }}/
           # Copy essential firmware files
           cp build_${{ matrix.target }}/*.bin firmware_${{ matrix.target }}/
           
