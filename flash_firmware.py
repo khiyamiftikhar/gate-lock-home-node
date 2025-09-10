@@ -395,4 +395,5 @@ Examples:
         print("\nStarting serial monitor...")
         monitor_device(args.port, args.chip)
     
+    
     exit(0 if success else 1)
