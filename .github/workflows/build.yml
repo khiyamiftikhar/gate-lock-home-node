@@ -6,7 +6,6 @@ on:
   pull_request:
     branches:
       - main
-
 jobs:
   build:
     name: Build for ${{ matrix.target }}
@@ -14,26 +13,50 @@ jobs:
     strategy:
       matrix:
         target: [esp32, esp32c3]
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
+      
       - name: Install ESP-IDF
         uses: espressif/install-esp-idf-action@v1
         with:
           version: v5.4.2
-
+      
       - name: Build project
         run: |
           idf.py -B build_${{ matrix.target }} \
                  -DIDF_TARGET=${{ matrix.target }} \
                  -DSDKCONFIG=sdkconfig.${{ matrix.target }} \
                  build
-
+      
+      - name: Create firmware package
+        run: |
+          mkdir -p firmware_${{ matrix.target }}
+          
+          # Copy essential firmware files
+          cp build_${{ matrix.target }}/*.bin firmware_${{ matrix.target }}/
+          
+          # Copy partition table
+          cp build_${{ matrix.target }}/partition_table/partition-table.bin firmware_${{ matrix.target }}/
+          
+          # Copy bootloader
+          cp build_${{ matrix.target }}/bootloader/bootloader.bin firmware_${{ matrix.target }}/
+          
+          # Copy flash arguments file (contains addresses and parameters)
+          cp build_${{ matrix.target }}/flash_args firmware_${{ matrix.target }}/ || echo "flash_args not found, skipping"
+          cp build_${{ matrix.target }}/flasher_args.json firmware_${{ matrix.target }}/ || echo "flasher_args.json not found, skipping"
+          
+          # Copy project info for your Python script
+          cp build_${{ matrix.target }}/project_description.json firmware_${{ matrix.target }}/ || echo "project_description.json not found, skipping"
+          
+          # Create a flash info file for your Python script
+          echo "target=${{ matrix.target }}" > firmware_${{ matrix.target }}/flash_info.txt
+          echo "idf_version=v5.4.2" >> firmware_${{ matrix.target }}/flash_info.txt
+          echo "build_time=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> firmware_${{ matrix.target }}/flash_info.txt
+      
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}-firmware
-          path: build_${{ matrix.target }}/
+          path: firmware_${{ matrix.target }}/
           retention-days: 7
