@@ -17,17 +17,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-     
-      - name: Cache ESP-IDF
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.espressif
-            ~/esp/esp-idf
-          key: esp-idf-${{ runner.os }}-v5.4.2
-          restore-keys: |
-            esp-idf-${{ runner.os }}-
 
+      # Cache build output - this is working perfectly
       - name: Cache build output
         uses: actions/cache@v4
         with:
@@ -36,13 +27,26 @@ jobs:
           restore-keys: |
             build-${{ matrix.target }}-
 
+      # Use ccache to speed up compilation
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ccache-${{ matrix.target }}
+          max-size: 200M
+
+      # Let the ESP-IDF action handle its own caching logic
       - name: Install ESP-IDF
         uses: espressif/install-esp-idf-action@v1
         with:
           version: v5.4.2
-     
+          cache: 'true'  # Enable the action's built-in caching
+
+      # Build project with optimizations
       - name: Build project
         run: |
+          # Use ccache for faster compilation
+          export CCACHE_DIR=$HOME/.ccache
+          
           idf.py -B build_${{ matrix.target }} \
                  -DIDF_TARGET=${{ matrix.target }} \
                  -DSDKCONFIG=sdkconfig.${{ matrix.target }} \
