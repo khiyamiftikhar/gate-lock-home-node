@@ -280,7 +280,9 @@ def flash_with_idf(port, chip, build_path, baud=460800):
         print("On Linux/Mac: Source the ESP-IDF environment: . ~/esp/esp-idf/export.sh")
         return False
 
-def monitor_device(port, chip):
+def monitor_device(port, chip,build_path):
+    
+    build_path = Path(build_path).resolve()  # same juggling as in flash_with_idf
     """Start serial monitor using idf.py"""
     env = os.environ.copy()
     env['IDF_TARGET'] = chip
@@ -393,7 +395,7 @@ Examples:
     
     if success and args.monitor:
         print("\nStarting serial monitor...")
-        monitor_device(args.port, args.chip)
+        monitor_device(args.port, args.chip,args.build_path)
     
-    
+
     exit(0 if success else 1)
