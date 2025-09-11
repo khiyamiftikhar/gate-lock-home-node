@@ -14,6 +14,7 @@ jobs:
     strategy:
       matrix:
         target: [esp32, esp32c3]
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,60 +28,68 @@ jobs:
           restore-keys: |
             build-${{ matrix.target }}-
 
-      # Use ccache to speed up compilation
+      # Setup ccache for faster compilation
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
           key: ccache-${{ matrix.target }}
           max-size: 200M
 
-      # Let the ESP-IDF action handle its own caching logic
+      # Install ESP-IDF (removed invalid 'cache' parameter)
       - name: Install ESP-IDF
         uses: espressif/install-esp-idf-action@v1
         with:
           version: v5.4.2
-          cache: 'true'  # Enable the action's built-in caching
 
-      # Build project with optimizations
+      # Build project with ccache optimizations
       - name: Build project
         run: |
-          # Use ccache for faster compilation
+          # Configure ccache
           export CCACHE_DIR=$HOME/.ccache
           
+          # Build with target-specific configuration
           idf.py -B build_${{ matrix.target }} \
                  -DIDF_TARGET=${{ matrix.target }} \
                  -DSDKCONFIG=sdkconfig.${{ matrix.target }} \
                  build
-     
+
+      # Create comprehensive firmware package
       - name: Create firmware package
         run: |
           mkdir -p firmware_${{ matrix.target }}
-         
+          
           # Copy top-level project file so idf.py flash works
           cp CMakeLists.txt firmware_${{ matrix.target }}/
+          
           # Copy essential firmware files
           cp build_${{ matrix.target }}/*.bin firmware_${{ matrix.target }}/
-         
-          #because monitor showed checksum mismatch between flashed and built app
+          
+          # Copy ELF file for debugging (fixes checksum mismatch issues)
           cp build_${{ matrix.target }}/*.elf firmware_${{ matrix.target }}/
+          
           # Copy partition table
           cp build_${{ matrix.target }}/partition_table/partition-table.bin firmware_${{ matrix.target }}/
-         
+          
           # Copy bootloader
           cp build_${{ matrix.target }}/bootloader/bootloader.bin firmware_${{ matrix.target }}/
-         
-          # Copy flash arguments file (contains addresses and parameters)
-          cp build_${{ matrix.target }}/flash_args firmware_${{ matrix.target }}/ || echo "flash_args not found, skipping"
-          cp build_${{ matrix.target }}/flasher_args.json firmware_${{ matrix.target }}/ || echo "flasher_args.json not found, skipping"
-         
-          # Copy project info for your Python script
-          cp build_${{ matrix.target }}/project_description.json firmware_${{ matrix.target }}/ || echo "project_description.json not found, skipping"
-         
-          # Create a flash info file for your Python script
-          echo "target=${{ matrix.target }}" > firmware_${{ matrix.target }}/flash_info.txt
-          echo "idf_version=v5.4.2" >> firmware_${{ matrix.target }}/flash_info.txt
-          echo "build_time=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> firmware_${{ matrix.target }}/flash_info.txt
-     
+          
+          # Copy flash configuration files (optional, won't fail if missing)
+          cp build_${{ matrix.target }}/flash_args firmware_${{ matrix.target }}/ 2>/dev/null || echo "flash_args not found, skipping"
+          cp build_${{ matrix.target }}/flasher_args.json firmware_${{ matrix.target }}/ 2>/dev/null || echo "flasher_args.json not found, skipping"
+          
+          # Copy project metadata
+          cp build_${{ matrix.target }}/project_description.json firmware_${{ matrix.target }}/ 2>/dev/null || echo "project_description.json not found, skipping"
+          
+          # Create flash info file for deployment scripts
+          cat > firmware_${{ matrix.target }}/flash_info.txt << EOF
+          target=${{ matrix.target }}
+          idf_version=v5.4.2
+          build_time=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          commit_sha=${{ github.sha }}
+          workflow_run=${{ github.run_number }}
+          EOF
+
+      # Upload firmware artifacts
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
