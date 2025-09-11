@@ -19,7 +19,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Cache build output - this is working perfectly
+      # Cache ESP-IDF installation
+      - name: Cache ESP-IDF
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/esp-idf
+            ${{ github.workspace }}/esp-tools
+          key: esp-idf-${{ hashFiles('**/CMakeLists.txt') }}-${{ github.ref }}
+          restore-keys: |
+            esp-idf-
+
+      # Install ESP-IDF to custom path
+      - name: Install ESP-IDF
+        uses: espressif/install-esp-idf-action@v1
+        with:
+          version: v5.4.2
+          path: ${{ github.workspace }}/esp-idf
+          tools-path: ${{ github.workspace }}/esp-tools
+
+      # Cache build output (target-specific)
       - name: Cache build output
         uses: actions/cache@v4
         with:
@@ -35,18 +54,10 @@ jobs:
           key: ccache-${{ matrix.target }}
           max-size: 200M
 
-      # Install ESP-IDF (removed invalid 'cache' parameter)
-      - name: Install ESP-IDF
-        uses: espressif/install-esp-idf-action@v1
-        with:
-          version: v5.4.2
-
       # Build project with ccache optimizations
       - name: Build project
         run: |
-          # Configure ccache
           export CCACHE_DIR=$HOME/.ccache
-          
           # Build with target-specific configuration
           idf.py -B build_${{ matrix.target }} \
                  -DIDF_TARGET=${{ matrix.target }} \
@@ -57,30 +68,14 @@ jobs:
       - name: Create firmware package
         run: |
           mkdir -p firmware_${{ matrix.target }}
-          
-          # Copy top-level project file so idf.py flash works
           cp CMakeLists.txt firmware_${{ matrix.target }}/
-          
-          # Copy essential firmware files
           cp build_${{ matrix.target }}/*.bin firmware_${{ matrix.target }}/
-          
-          # Copy ELF file for debugging (fixes checksum mismatch issues)
           cp build_${{ matrix.target }}/*.elf firmware_${{ matrix.target }}/
-          
-          # Copy partition table
           cp build_${{ matrix.target }}/partition_table/partition-table.bin firmware_${{ matrix.target }}/
-          
-          # Copy bootloader
           cp build_${{ matrix.target }}/bootloader/bootloader.bin firmware_${{ matrix.target }}/
-          
-          # Copy flash configuration files (optional, won't fail if missing)
           cp build_${{ matrix.target }}/flash_args firmware_${{ matrix.target }}/ 2>/dev/null || echo "flash_args not found, skipping"
           cp build_${{ matrix.target }}/flasher_args.json firmware_${{ matrix.target }}/ 2>/dev/null || echo "flasher_args.json not found, skipping"
-          
-          # Copy project metadata
           cp build_${{ matrix.target }}/project_description.json firmware_${{ matrix.target }}/ 2>/dev/null || echo "project_description.json not found, skipping"
-          
-          # Create flash info file for deployment scripts
           cat > firmware_${{ matrix.target }}/flash_info.txt << EOF
           target=${{ matrix.target }}
           idf_version=v5.4.2
