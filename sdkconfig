@@ -407,6 +407,13 @@ CONFIG_PARTITION_TABLE_MD5=y
 # end of Partition Table
 
 #
+# Wifi Smartconfig
+#
+CONFIG_SET_MAC_ADDRESS_OF_TARGET_AP=y
+CONFIG_MAX_AP_COUNT=3
+# end of Wifi Smartconfig
+
+#
 # Compiler options
 #
 CONFIG_COMPILER_OPTIMIZATION_DEBUG=y
