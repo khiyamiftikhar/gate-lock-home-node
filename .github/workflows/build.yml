@@ -37,7 +37,26 @@ jobs:
           echo "BUILD_TYPE=${BUILD_TYPE}" >> $GITHUB_ENV
           echo "IS_RELEASE=${IS_RELEASE}" >> $GITHUB_ENV
           echo "🏷️ Building version: ${VERSION} (${BUILD_TYPE})"
+      
+      # Add this step after "Get Version from Tag" to test your logic
+      - name: Debug Version Logic
+        run: |
+          echo "🔍 Current branch: ${{ github.ref }}"
+          echo "🔍 Event type: ${{ github.event_name }}"
+          echo "🔍 Is tag push: $(echo '${{ github.ref }}' | grep -q '^refs/tags/' && echo 'YES' || echo 'NO')"
           
+          # Test what would happen with a real tag
+          echo "📝 Simulating version scenarios:"
+          
+          echo "Current scenario (actual):"
+          echo "  VERSION: ${{ env.VERSION }}"
+          echo "  BUILD_TYPE: ${{ env.BUILD_TYPE }}" 
+          echo "  IS_RELEASE: ${{ env.IS_RELEASE }}"
+          
+          # Show what files are created
+          echo "📁 Generated artifacts:"
+          ls -la firmware_${{ matrix.target }}/flash_info.txt || echo "No flash_info.txt found"
+                
       # Cache ESP-IDF installation
       - name: Cache ESP-IDF
         uses: actions/cache@v4
@@ -133,7 +152,8 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')  # Only run for version tags
-    
+    permissions:
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
