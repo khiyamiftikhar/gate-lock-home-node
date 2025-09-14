@@ -39,7 +39,7 @@ jobs:
       - name: Setup ESP-IDF environment
         if: ${{ steps.cache-esp-idf.outputs.cache-hit == 'true' }}
         run: |
-          source $HOME/.espressif/tools/activate_idf_v${{ env.ESP_IDF_VERSION }}.sh
+          source $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh
 
       
       # Install ESP-IDF (works for both cache hit and miss). Not installed on cache hit
