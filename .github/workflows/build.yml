@@ -44,97 +44,136 @@ jobs:
           path: ${{ github.workspace }}/esp-idf
           tools-path: ${{ github.workspace }}/esp-tools
       
-            # Setup ccache and persist it
+  # Cache build output (target-specific)
+      - name: Cache build output
+        uses: actions/cache@v4
+        with:
+          path: build_${{ matrix.target }}
+          key: build-${{ matrix.target }}-${{ hashFiles('main/**/*.c', 'main/**/*.h', 'components/**', 'CMakeLists.txt', 'sdkconfig.${{ matrix.target }}') }}
+          restore-keys: |
+            build-${{ matrix.target }}-
+            
+      # Setup ccache for faster compilation
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ccache-${{ matrix.target }}-${{ hashFiles('main/**', 'components/**', 'CMakeLists.txt') }}
-          restore-keys: |
-            ccache-${{ matrix.target }}-
-            ccache-
-          max-size: 300M
-          create-symlink: true
-
-      # Configure ccache
-      - name: Configure ccache
-        run: |
-          ccache --set-config=cache_dir=$HOME/.ccache
-          ccache --set-config=max_size=300M
-          ccache --set-config=compression=true
-          ccache --set-config=sloppiness=file_macro,time_macros,include_file_mtime
-          echo "== ccache stats before build =="
-          ccache --zero-stats
-          ccache --show-stats
-
-      # Build project with optimizations
+          key: ccache-${{ matrix.target }}
+          max-size: 200M
+          
+      # ← MODIFIED: Build project with version embedded
       - name: Build project
         run: |
-          # Configure build environment
           export CCACHE_DIR=$HOME/.ccache
-          export IDF_CCACHE_ENABLE=1
-          export CMAKE_BUILD_PARALLEL_LEVEL=$(nproc)
-
-          # Build with target-specific configuration
+          echo "🔨 Building ${{ matrix.target }} with version ${{ env.VERSION }}"
+          # Build with target-specific configuration AND version
           idf.py -B build_${{ matrix.target }} \
                  -DIDF_TARGET=${{ matrix.target }} \
                  -DSDKCONFIG=sdkconfig.${{ matrix.target }} \
+                 -DPROJECT_VER=${{ env.VERSION }} \
                  build
-
-      # Show ccache stats after build
-      - name: Show ccache stats
-        run: ccache --show-stats
-
-      # Show build statistics
-      - name: Show build stats
-        run: |
-          echo "=== ccache statistics ==="
-          ccache --show-stats
-          echo "=== Build size info ==="
-          ls -lh build_${{ matrix.target }}/*.bin 2>/dev/null || echo "No .bin files found"
-      
-      # Create firmware package
+                 
+      # ← MODIFIED: Create comprehensive firmware package with version info
       - name: Create firmware package
         run: |
           mkdir -p firmware_${{ matrix.target }}
-          BUILD_DIR="build_${{ matrix.target }}"
-          
-          # Copy essential files
           cp CMakeLists.txt firmware_${{ matrix.target }}/
+          cp build_${{ matrix.target }}/*.bin firmware_${{ matrix.target }}/
+          cp build_${{ matrix.target }}/*.elf firmware_${{ matrix.target }}/
+          cp build_${{ matrix.target }}/partition_table/partition-table.bin firmware_${{ matrix.target }}/
+          cp build_${{ matrix.target }}/bootloader/bootloader.bin firmware_${{ matrix.target }}/
+          cp build_${{ matrix.target }}/flash_args firmware_${{ matrix.target }}/ 2>/dev/null || echo "flash_args not found, skipping"
+          cp build_${{ matrix.target }}/flasher_args.json firmware_${{ matrix.target }}/ 2>/dev/null || echo "flasher_args.json not found, skipping"
+          cp build_${{ matrix.target }}/project_description.json firmware_${{ matrix.target }}/ 2>/dev/null || echo "project_description.json not found, skipping"
           
-          # Copy build artifacts
-          find $BUILD_DIR -name "*.bin" -exec cp {} firmware_${{ matrix.target }}/ \;
-          find $BUILD_DIR -name "*.elf" -maxdepth 1 -exec cp {} firmware_${{ matrix.target }}/ \;
-          
-          # Copy partition and bootloader files
-          [ -f "$BUILD_DIR/partition_table/partition-table.bin" ] && \
-            cp "$BUILD_DIR/partition_table/partition-table.bin" firmware_${{ matrix.target }}/
-          [ -f "$BUILD_DIR/bootloader/bootloader.bin" ] && \
-            cp "$BUILD_DIR/bootloader/bootloader.bin" firmware_${{ matrix.target }}/
-          
-          # Copy flash configuration files
-          for file in flash_args flasher_args.json project_description.json; do
-            [ -f "$BUILD_DIR/$file" ] && cp "$BUILD_DIR/$file" firmware_${{ matrix.target }}/
-          done
-          
-          # Create build info
-          cat > firmware_${{ matrix.target }}/build_info.txt << EOF
-          Target: ${{ matrix.target }}
-          IDF Version: ${{ env.ESP_IDF_VERSION }}
-          Build Time: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          Commit SHA: ${{ github.sha }}
-          Workflow Run: ${{ github.run_number }}
-          Cache Hit: ${{ steps.cache-esp-idf.outputs.cache-hit }}
+          # ← ENHANCED: Add version info to flash_info.txt
+          cat > firmware_${{ matrix.target }}/flash_info.txt << EOF
+          version=${{ env.VERSION }}
+          build_type=${{ env.BUILD_TYPE }}
+          target=${{ matrix.target }}
+          idf_version=v5.4.2
+          build_time=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          commit_sha=${{ github.sha }}
+          workflow_run=${{ github.run_number }}
           EOF
           
-          # Show package contents
-          echo "Firmware package contents for ${{ matrix.target }}:"
-          ls -la firmware_${{ matrix.target }}/
-      
-      # Upload firmware artifacts
+      # ← NEW: Create OTA-ready firmware file (for releases only)
+      - name: Create OTA firmware file
+        if: env.IS_RELEASE == 'true'
+        run: |
+          # Copy main firmware binary with version in filename
+          cp build_${{ matrix.target }}/$(ls build_${{ matrix.target }}/ | grep "\.bin$" | grep -v bootloader | grep -v partition-table | head -1) \
+             firmware-ota-${{ matrix.target }}-${{ env.VERSION }}.bin
+          echo "📦 Created OTA file: firmware-ota-${{ matrix.target }}-${{ env.VERSION }}.bin"
+          ls -la firmware-ota-${{ matrix.target }}-${{ env.VERSION }}.bin
+          
+      # Upload firmware artifacts (regular workflow)
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-${{ matrix.target }}-${{ github.run_number }}
+          name: ${{ matrix.target }}-firmware-${{ env.VERSION }}
           path: firmware_${{ matrix.target }}/
-          retention-days: 13
-          compression-level: 6
+          retention-days: 7
+
+  # ← NEW: Create GitHub Release (only for tags)
+  create-release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')  # Only run for version tags
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Get Version
+        run: |
+          VERSION=$(git describe --exact-match --tags HEAD)
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          
+      - name: Generate Changelog
+        run: |
+          # Get previous tag for changelog
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            echo "## Changes since $PREV_TAG:" > CHANGELOG.md
+            git log --oneline --no-merges $PREV_TAG..HEAD >> CHANGELOG.md
+          else
+            echo "## Initial Release" > CHANGELOG.md
+            echo "First tagged release of the firmware." >> CHANGELOG.md
+          fi
+          
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          
+      - name: Prepare release files
+        run: |
+          mkdir -p release_files
+          
+          # Create complete firmware packages (ZIP files for testing)
+          for target in esp32 esp32c3; do
+            if [ -d "artifacts/${target}-firmware-${{ env.VERSION }}" ]; then
+              cd "artifacts/${target}-firmware-${{ env.VERSION }}"
+              zip -r "../../release_files/firmware-complete-${target}-${{ env.VERSION }}.zip" .
+              cd ../..
+              echo "📦 Created: firmware-complete-${target}-${{ env.VERSION }}.zip"
+            fi
+          done
+          
+          # Move OTA files if they exist
+          find artifacts/ -name "firmware-ota-*-${{ env.VERSION }}.bin" -exec cp {} release_files/ \;
+          
+          ls -la release_files/
+          
+      - name: Create Draft Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: "${{ env.VERSION }} (⏳ Testing Required)"
+          body_path: CHANGELOG.md
+          draft: true  # ← IMPORTANT: Creates draft release
+          prerelease: false
+          files: release_files/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
