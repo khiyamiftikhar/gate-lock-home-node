@@ -72,6 +72,7 @@ jobs:
       # ← MODIFIED: Build project with version embedded
       - name: Build project
         run: |
+          source $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh -e
           export CCACHE_DIR=$HOME/.ccache
           echo "🔨 Building ${{ matrix.target }} with version ${{ env.VERSION }}"
           # Build with target-specific configuration AND version
