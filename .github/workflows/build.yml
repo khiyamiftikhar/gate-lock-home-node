@@ -38,6 +38,7 @@ jobs:
       
       # Install ESP-IDF (works for both cache hit and miss)
       - name: Install ESP-IDF
+        if: ${{ !steps.cache-esp-idf.outputs.cache-hit }}
         uses: espressif/install-esp-idf-action@v1
         with:
           version: ${{ env.ESP_IDF_VERSION }}
