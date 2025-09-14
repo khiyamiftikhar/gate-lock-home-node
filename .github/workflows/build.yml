@@ -22,40 +22,39 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       
-      # Target-specific ESP-IDF cache to avoid race conditions
+      # Cache ESP-IDF installation
       - name: Cache ESP-IDF and tools
         id: cache-esp-idf
         uses: actions/cache@v4
         with:
           path: |
-            ${{ github.workspace }}/esp-idf
-            ${{ github.workspace }}/esp-tools
             ~/.espressif
           key: esp-idf-${{ env.ESP_IDF_VERSION }}-${{ runner.os }}-${{ matrix.target }}
           restore-keys: |
             esp-idf-${{ env.ESP_IDF_VERSION }}-${{ runner.os }}-
             esp-idf-${{ env.ESP_IDF_VERSION }}-
       
-      # Install ESP-IDF (works for both cache hit and miss)
+      # Install ESP-IDF
       - name: Install ESP-IDF
         uses: espressif/install-esp-idf-action@v1
         with:
           version: ${{ env.ESP_IDF_VERSION }}
-          path: ${{ github.workspace }}/esp-idf
-          tools-path: ${{ github.workspace }}/esp-tools
       
-      # Enhanced ccache setup
+      # Setup ccache with better configuration
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ccache-${{ matrix.target }}-${{ hashFiles('main/**', 'components/**', 'CMakeLists.txt') }}
+          key: ccache-${{ matrix.target }}-${{ env.ESP_IDF_VERSION }}-${{ hashFiles('main/**/*.c', 'main/**/*.h', 'components/**', 'CMakeLists.txt', 'sdkconfig*') }}
           restore-keys: |
+            ccache-${{ matrix.target }}-${{ env.ESP_IDF_VERSION }}-
             ccache-${{ matrix.target }}-
             ccache-
-          max-size: 300M
+          max-size: 500M
           create-symlink: true
+          verbose: 2
+          save: true
       
-      # Target-specific build cache
+      # Cache build output
       - name: Cache build output
         uses: actions/cache@v4
         with:
@@ -65,24 +64,94 @@ jobs:
             build-${{ matrix.target }}-${{ hashFiles('main/**/*.c', 'main/**/*.h', 'components/**', 'CMakeLists.txt') }}-
             build-${{ matrix.target }}-
       
-      # Configure ccache
-      - name: Configure ccache
+      # Configure ccache for ESP-IDF cross-compilation
+      - name: Configure ccache for ESP-IDF
         run: |
+          # Basic ccache configuration
           ccache --set-config=cache_dir=$HOME/.ccache
-          ccache --set-config=max_size=300M
+          ccache --set-config=max_size=500M
           ccache --set-config=compression=true
-          ccache --set-config=sloppiness=file_macro,time_macros,include_file_mtime
-          ccache --zero-stats
+          ccache --set-config=compression_level=6
+          ccache --set-config=sloppiness=file_macro,time_macros,include_file_mtime,include_file_ctime,file_stat_matches,pch_defines
+          ccache --set-config=hash_dir=false
+          ccache --set-config=base_dir=${{ github.workspace }}
+          ccache --set-config=compiler_check=mtime
+          
+          # Create ccache wrapper directory
+          mkdir -p $HOME/ccache_wrappers
+          
+          # Find ESP-IDF toolchain and create wrappers
+          echo "=== Setting up ccache for ESP-IDF toolchain ==="
+          
+          # For ESP32
+          if [ "${{ matrix.target }}" = "esp32" ]; then
+            TOOLCHAIN_PREFIX="xtensa-esp32-elf"
+          elif [ "${{ matrix.target }}" = "esp32c3" ]; then
+            TOOLCHAIN_PREFIX="riscv32-esp-elf"
+          fi
+          
+          # Find toolchain path
+          TOOLCHAIN_PATH=$(find ~/.espressif/tools -name "${TOOLCHAIN_PREFIX}-gcc" -type f | head -1)
+          if [ -n "$TOOLCHAIN_PATH" ]; then
+            TOOLCHAIN_DIR=$(dirname "$TOOLCHAIN_PATH")
+            echo "Found toolchain at: $TOOLCHAIN_DIR"
+            
+            # Create ccache wrappers for all relevant compilers
+            for tool in gcc g++ c++; do
+              COMPILER="${TOOLCHAIN_PREFIX}-${tool}"
+              if [ -f "$TOOLCHAIN_DIR/$COMPILER" ]; then
+                echo "Creating ccache wrapper for $COMPILER"
+                cat > $HOME/ccache_wrappers/$COMPILER << EOF
+#!/bin/bash
+exec ccache "$TOOLCHAIN_DIR/$COMPILER" "\$@"
+EOF
+                chmod +x $HOME/ccache_wrappers/$COMPILER
+              fi
+            done
+            
+            # Add wrapper directory to PATH
+            echo "$HOME/ccache_wrappers" >> $GITHUB_PATH
+            export PATH="$HOME/ccache_wrappers:$PATH"
+          else
+            echo "Warning: Could not find toolchain for ${{ matrix.target }}"
+          fi
+          
+          echo "=== ccache wrappers created ==="
+          ls -la $HOME/ccache_wrappers/ 2>/dev/null || echo "No wrappers found"
+          
+          echo "=== ccache configuration ==="
+          ccache --show-config
+          
+          echo "=== Initial ccache stats ==="
+          ccache --show-stats
       
-      # Build project with optimizations
+      # Build project
       - name: Build project
         run: |
           # Configure build environment
           export CCACHE_DIR=$HOME/.ccache
           export IDF_CCACHE_ENABLE=1
           export CMAKE_BUILD_PARALLEL_LEVEL=$(nproc)
+          export CCACHE_BASEDIR=${{ github.workspace }}
+          
+          # Verify setup
+          echo "=== Build environment ==="
+          echo "PATH: $PATH"
+          echo "CCACHE_DIR: $CCACHE_DIR"
+          echo "IDF_CCACHE_ENABLE: $IDF_CCACHE_ENABLE"
+          
+          # Check if our wrappers are in PATH
+          if [ "${{ matrix.target }}" = "esp32" ]; then
+            which xtensa-esp32-elf-gcc || echo "xtensa-esp32-elf-gcc not found in PATH"
+          elif [ "${{ matrix.target }}" = "esp32c3" ]; then
+            which riscv32-esp-elf-gcc || echo "riscv32-esp-elf-gcc not found in PATH"
+          fi
+          
+          # Reset stats for clean measurement
+          ccache --zero-stats
           
           # Build with target-specific configuration
+          echo "=== Starting build for ${{ matrix.target }} ==="
           idf.py -B build_${{ matrix.target }} \
                  -DIDF_TARGET=${{ matrix.target }} \
                  -DSDKCONFIG=sdkconfig.${{ matrix.target }} \
@@ -93,13 +162,22 @@ jobs:
         run: |
           echo "=== ccache statistics after build ==="
           ccache --show-stats
+          
           echo "=== ccache hit ratio ==="
-          ccache --show-stats | grep -E "(Cacheable calls|Hits|Misses)"
-          echo "=== Build size info ==="
+          STATS=$(ccache --show-stats)
+          echo "$STATS" | grep -E "(Cacheable calls|Hits|Misses|cache hit rate)"
+          
+          echo "=== Build artifacts ==="
           ls -lh build_${{ matrix.target }}/*.bin 2>/dev/null || echo "No .bin files found"
+          
+          echo "=== Memory usage ==="
+          du -sh build_${{ matrix.target }} 2>/dev/null || echo "Build directory not found"
+          
           echo "=== Flash command ==="
           echo "To flash: idf.py -p PORT flash"
-          echo "Flash args: $(cat build_${{ matrix.target }}/flash_args 2>/dev/null || echo 'flash_args not found')"
+          if [ -f "build_${{ matrix.target }}/flash_args" ]; then
+            echo "Flash args: $(cat build_${{ matrix.target }}/flash_args)"
+          fi
       
       # Create firmware package
       - name: Create firmware package
@@ -108,11 +186,11 @@ jobs:
           BUILD_DIR="build_${{ matrix.target }}"
           
           # Copy essential files
-          cp CMakeLists.txt firmware_${{ matrix.target }}/
+          cp CMakeLists.txt firmware_${{ matrix.target }}/ 2>/dev/null || echo "CMakeLists.txt not found"
           
           # Copy build artifacts
-          find $BUILD_DIR -name "*.bin" -exec cp {} firmware_${{ matrix.target }}/ \;
-          find $BUILD_DIR -name "*.elf" -maxdepth 1 -exec cp {} firmware_${{ matrix.target }}/ \;
+          find $BUILD_DIR -name "*.bin" -exec cp {} firmware_${{ matrix.target }}/ \; 2>/dev/null || echo "No .bin files found"
+          find $BUILD_DIR -name "*.elf" -maxdepth 1 -exec cp {} firmware_${{ matrix.target }}/ \; 2>/dev/null || echo "No .elf files found"
           
           # Copy partition and bootloader files
           [ -f "$BUILD_DIR/partition_table/partition-table.bin" ] && \
@@ -132,11 +210,11 @@ jobs:
           Build Time: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
           Commit SHA: ${{ github.sha }}
           Workflow Run: ${{ github.run_number }}
-          Cache Hit: ${{ steps.cache-esp-idf.outputs.cache-hit }}
+          Cache Status: ESP-IDF=${{ steps.cache-esp-idf.outputs.cache-hit }}
           EOF
           
           # Show package contents
-          echo "Firmware package contents for ${{ matrix.target }}:"
+          echo "=== Firmware package contents for ${{ matrix.target }} ==="
           ls -la firmware_${{ matrix.target }}/
       
       # Upload firmware artifacts
