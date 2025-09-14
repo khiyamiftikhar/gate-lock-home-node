@@ -91,10 +91,15 @@ jobs:
       # Show build statistics
       - name: Show build stats
         run: |
-          echo "=== ccache statistics ==="
+          echo "=== ccache statistics after build ==="
           ccache --show-stats
+          echo "=== ccache hit ratio ==="
+          ccache --show-stats | grep -E "(Cacheable calls|Hits|Misses)"
           echo "=== Build size info ==="
           ls -lh build_${{ matrix.target }}/*.bin 2>/dev/null || echo "No .bin files found"
+          echo "=== Flash command ==="
+          echo "To flash: idf.py -p PORT flash"
+          echo "Flash args: $(cat build_${{ matrix.target }}/flash_args 2>/dev/null || echo 'flash_args not found')"
       
       # Create firmware package
       - name: Create firmware package
