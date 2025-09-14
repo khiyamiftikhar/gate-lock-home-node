@@ -97,14 +97,13 @@ jobs:
           export CC="ccache gcc"
           export CXX="ccache g++"
           
-          # Use ninja for faster builds (if available)
-          export CMAKE_GENERATOR=Ninja
+          # Set parallel build jobs via environment variable
+          export CMAKE_BUILD_PARALLEL_LEVEL=$(nproc)
           
-          # Build with target-specific configuration and parallel jobs
+          # Build with target-specific configuration
           idf.py -B build_${{ matrix.target }} \
                  -DIDF_TARGET=${{ matrix.target }} \
                  -DSDKCONFIG=sdkconfig.${{ matrix.target }} \
-                 -j$(nproc) \
                  build
       
       # Show ccache statistics
