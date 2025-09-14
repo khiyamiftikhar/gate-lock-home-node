@@ -154,5 +154,5 @@ jobs:
         with:
           name: firmware-${{ matrix.target }}-${{ github.run_number }}
           path: firmware_${{ matrix.target }}/
-          retention-days: 14
+          retention-days: 13
           compression-level: 6
