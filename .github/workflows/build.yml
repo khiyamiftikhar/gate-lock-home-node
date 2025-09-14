@@ -9,8 +9,6 @@ on:
 
 env:
   ESP_IDF_VERSION: v5.4.2
-  IDF_TOOLS_PATH: ${{ github.workspace }}/esp-tools
-  IDF_PATH: ${{ github.workspace }}/esp-idf
 
 jobs:
   build:
@@ -24,30 +22,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       
-      # Debug and cache ESP-IDF installation
+      # Target-specific ESP-IDF cache to avoid race conditions
       - name: Cache ESP-IDF and tools
         id: cache-esp-idf
         uses: actions/cache@v4
         with:
           path: |
-            ${{ env.IDF_PATH }}
-            ${{ env.IDF_TOOLS_PATH }}
+            ${{ github.workspace }}/esp-idf
+            ${{ github.workspace }}/esp-tools
             ~/.espressif
-          key: esp-idf-${{ env.ESP_IDF_VERSION }}-${{ runner.os }}
+          key: esp-idf-${{ env.ESP_IDF_VERSION }}-${{ runner.os }}-${{ matrix.target }}
           restore-keys: |
+            esp-idf-${{ env.ESP_IDF_VERSION }}-${{ runner.os }}-
             esp-idf-${{ env.ESP_IDF_VERSION }}-
-            esp-idf-v5.4.2-
-            esp-idf-
-      
-      # Debug cache status
-      - name: Debug cache status
-        run: |
-          echo "Cache hit: ${{ steps.cache-esp-idf.outputs.cache-hit }}"
-          echo "Cache key: esp-idf-${{ env.ESP_IDF_VERSION }}-${{ runner.os }}"
-          echo "Checking if paths exist:"
-          ls -la ${{ env.IDF_PATH }} || echo "IDF_PATH does not exist"
-          ls -la ${{ env.IDF_TOOLS_PATH }} || echo "IDF_TOOLS_PATH does not exist"
-          ls -la ~/.espressif || echo "~/.espressif does not exist"
       
       # Only install ESP-IDF if cache miss
       - name: Install ESP-IDF
@@ -55,22 +42,20 @@ jobs:
         uses: espressif/install-esp-idf-action@v1
         with:
           version: ${{ env.ESP_IDF_VERSION }}
-          path: ${{ env.IDF_PATH }}
-          tools-path: ${{ env.IDF_TOOLS_PATH }}
+          path: ${{ github.workspace }}/esp-idf
+          tools-path: ${{ github.workspace }}/esp-tools
       
-      # Setup ESP-IDF environment (always needed)
+      # Setup ESP-IDF environment for cache hits
       - name: Setup ESP-IDF environment
         if: steps.cache-esp-idf.outputs.cache-hit == 'true'
         run: |
-          # Source the activation script
           source $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh
-          # Export environment variables for subsequent steps
           echo "PATH=$PATH" >> $GITHUB_ENV
-          echo "IDF_PATH=$IDF_PATH" >> $GITHUB_ENV
-          echo "ESP_IDF_VERSION=$ESP_IDF_VERSION" >> $GITHUB_ENV
-          echo "IDF_TOOLS_PATH=$IDF_TOOLS_PATH" >> $GITHUB_ENV
+          echo "IDF_PATH=${{ github.workspace }}/esp-idf/v${{ env.ESP_IDF_VERSION }}/esp-idf" >> $GITHUB_ENV
+          echo "ESP_IDF_VERSION=${{ env.ESP_IDF_VERSION }}" >> $GITHUB_ENV
+          echo "IDF_TOOLS_PATH=${{ github.workspace }}/esp-tools" >> $GITHUB_ENV
       
-      # Enhanced ccache setup with better configuration
+      # Enhanced ccache setup
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
@@ -81,17 +66,17 @@ jobs:
           max-size: 300M
           create-symlink: true
       
-      # Target-specific build cache with better key
+      # Target-specific build cache
       - name: Cache build output
         uses: actions/cache@v4
         with:
           path: build_${{ matrix.target }}
-          key: build-${{ matrix.target }}-${{ hashFiles('main/**/*.c', 'main/**/*.h', 'components/**', 'CMakeLists.txt', 'sdkconfig.${{ matrix.target }}', 'partitions.csv') }}-${{ env.ESP_IDF_VERSION }}
+          key: build-${{ matrix.target }}-${{ hashFiles('main/**/*.c', 'main/**/*.h', 'components/**', 'CMakeLists.txt', 'sdkconfig.${{ matrix.target }}') }}-${{ env.ESP_IDF_VERSION }}
           restore-keys: |
             build-${{ matrix.target }}-${{ hashFiles('main/**/*.c', 'main/**/*.h', 'components/**', 'CMakeLists.txt') }}-
             build-${{ matrix.target }}-
       
-      # Configure ccache for optimal performance
+      # Configure ccache
       - name: Configure ccache
         run: |
           ccache --set-config=cache_dir=$HOME/.ccache
@@ -103,12 +88,9 @@ jobs:
       # Build project with optimizations
       - name: Build project
         run: |
-          # Ensure ccache is in PATH and configured
+          # Configure build environment
           export CCACHE_DIR=$HOME/.ccache
-          export CC="ccache gcc"
-          export CXX="ccache g++"
-          
-          # Set parallel build jobs via environment variable
+          export IDF_CCACHE_ENABLE=1
           export CMAKE_BUILD_PARALLEL_LEVEL=$(nproc)
           
           # Build with target-specific configuration
@@ -117,33 +99,37 @@ jobs:
                  -DSDKCONFIG=sdkconfig.${{ matrix.target }} \
                  build
       
-      # Show ccache statistics
-      - name: Show ccache stats
-        run: ccache --show-stats
+      # Show build statistics
+      - name: Show build stats
+        run: |
+          echo "=== ccache statistics ==="
+          ccache --show-stats
+          echo "=== Build size info ==="
+          ls -lh build_${{ matrix.target }}/*.bin 2>/dev/null || echo "No .bin files found"
       
-      # Create comprehensive firmware package
+      # Create firmware package
       - name: Create firmware package
         run: |
           mkdir -p firmware_${{ matrix.target }}
+          BUILD_DIR="build_${{ matrix.target }}"
           
           # Copy essential files
           cp CMakeLists.txt firmware_${{ matrix.target }}/
           
-          # Copy build artifacts with error handling
-          BUILD_DIR="build_${{ matrix.target }}"
-          
-          # Main firmware files
+          # Copy build artifacts
           find $BUILD_DIR -name "*.bin" -exec cp {} firmware_${{ matrix.target }}/ \;
           find $BUILD_DIR -name "*.elf" -maxdepth 1 -exec cp {} firmware_${{ matrix.target }}/ \;
           
-          # Partition and bootloader
-          [ -f "$BUILD_DIR/partition_table/partition-table.bin" ] && cp "$BUILD_DIR/partition_table/partition-table.bin" firmware_${{ matrix.target }}/
-          [ -f "$BUILD_DIR/bootloader/bootloader.bin" ] && cp "$BUILD_DIR/bootloader/bootloader.bin" firmware_${{ matrix.target }}/
+          # Copy partition and bootloader files
+          [ -f "$BUILD_DIR/partition_table/partition-table.bin" ] && \
+            cp "$BUILD_DIR/partition_table/partition-table.bin" firmware_${{ matrix.target }}/
+          [ -f "$BUILD_DIR/bootloader/bootloader.bin" ] && \
+            cp "$BUILD_DIR/bootloader/bootloader.bin" firmware_${{ matrix.target }}/
           
-          # Flash configuration files
-          [ -f "$BUILD_DIR/flash_args" ] && cp "$BUILD_DIR/flash_args" firmware_${{ matrix.target }}/
-          [ -f "$BUILD_DIR/flasher_args.json" ] && cp "$BUILD_DIR/flasher_args.json" firmware_${{ matrix.target }}/
-          [ -f "$BUILD_DIR/project_description.json" ] && cp "$BUILD_DIR/project_description.json" firmware_${{ matrix.target }}/
+          # Copy flash configuration files
+          for file in flash_args flasher_args.json project_description.json; do
+            [ -f "$BUILD_DIR/$file" ] && cp "$BUILD_DIR/$file" firmware_${{ matrix.target }}/
+          done
           
           # Create build info
           cat > firmware_${{ matrix.target }}/build_info.txt << EOF
@@ -152,14 +138,14 @@ jobs:
           Build Time: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
           Commit SHA: ${{ github.sha }}
           Workflow Run: ${{ github.run_number }}
-          Build Type: ${{ github.event_name }}
+          Cache Hit: ${{ steps.cache-esp-idf.outputs.cache-hit }}
           EOF
           
-          # List contents for verification
-          echo "Firmware package contents:"
+          # Show package contents
+          echo "Firmware package contents for ${{ matrix.target }}:"
           ls -la firmware_${{ matrix.target }}/
       
-      # Upload firmware artifacts with better naming
+      # Upload firmware artifacts
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
