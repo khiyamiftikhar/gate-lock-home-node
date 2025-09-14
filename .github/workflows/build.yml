@@ -44,7 +44,7 @@ jobs:
           path: ${{ github.workspace }}/esp-idf
           tools-path: ${{ github.workspace }}/esp-tools
       
-      # Enhanced ccache setup
+            # Setup ccache and persist it
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
@@ -54,17 +54,7 @@ jobs:
             ccache-
           max-size: 300M
           create-symlink: true
-      
-      # Target-specific build cache
-      - name: Cache build output
-        uses: actions/cache@v4
-        with:
-          path: build_${{ matrix.target }}
-          key: build-${{ matrix.target }}-${{ hashFiles('main/**/*.c', 'main/**/*.h', 'components/**', 'CMakeLists.txt', 'sdkconfig.${{ matrix.target }}') }}-${{ env.ESP_IDF_VERSION }}
-          restore-keys: |
-            build-${{ matrix.target }}-${{ hashFiles('main/**/*.c', 'main/**/*.h', 'components/**', 'CMakeLists.txt') }}-
-            build-${{ matrix.target }}-
-      
+
       # Configure ccache
       - name: Configure ccache
         run: |
@@ -72,8 +62,10 @@ jobs:
           ccache --set-config=max_size=300M
           ccache --set-config=compression=true
           ccache --set-config=sloppiness=file_macro,time_macros,include_file_mtime
+          echo "== ccache stats before build =="
           ccache --zero-stats
-      
+          ccache --show-stats
+
       # Build project with optimizations
       - name: Build project
         run: |
@@ -81,13 +73,17 @@ jobs:
           export CCACHE_DIR=$HOME/.ccache
           export IDF_CCACHE_ENABLE=1
           export CMAKE_BUILD_PARALLEL_LEVEL=$(nproc)
-          
+
           # Build with target-specific configuration
           idf.py -B build_${{ matrix.target }} \
                  -DIDF_TARGET=${{ matrix.target }} \
                  -DSDKCONFIG=sdkconfig.${{ matrix.target }} \
                  build
-      
+
+      # Show ccache stats after build
+      - name: Show ccache stats
+        run: ccache --show-stats
+
       # Show build statistics
       - name: Show build stats
         run: |
