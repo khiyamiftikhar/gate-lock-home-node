@@ -53,26 +53,22 @@ jobs:
           path: ${{ github.workspace }}/esp-idf
           tools-path: ${{ github.workspace }}/esp-tools
       
-  # Restore ccache directory
-      - name: Restore ccache
+  # Cache build output (target-specific)
+      - name: Cache build output
         uses: actions/cache@v4
         with:
-          path: ~/.ccache
+          path: build_${{ matrix.target }}
+          key: build-${{ matrix.target }}-${{ hashFiles('main/**/*.c', 'main/**/*.h', 'components/**', 'CMakeLists.txt', 'sdkconfig.${{ matrix.target }}') }}
+          restore-keys: |
+            build-${{ matrix.target }}-
+            
+      # Setup ccache for faster compilation
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
           key: ccache-${{ matrix.target }}
-
-  # Configure ccache
-      - name: Configure ccache
-        run: |
-          export CCACHE_DIR=$HOME/.ccache
-          ccache --set-config=cache_dir=$CCACHE_DIR
-          ccache --set-config=max_size=200M
-          ccache --set-config=compression=true
-          ccache -z
-
-# (Optional) Debug ccache installation
-      - name: Check ccache
-        run: ccache --version
-        
+          max-size: 200M
+          
       # ← MODIFIED: Build project with version embedded
       - name: Build project
         run: |
