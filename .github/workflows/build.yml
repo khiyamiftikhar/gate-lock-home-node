@@ -53,7 +53,36 @@ jobs:
           path: ${{ github.workspace }}/esp-idf
           tools-path: ${{ github.workspace }}/esp-tools
       
-  # Cache build output (target-specific)
+      # Cache ccache installation and compilation cache
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.ccache
+            /usr/bin/ccache
+            /usr/lib/ccache
+            /usr/share/ccache
+          key: ccache-${{ matrix.target }}-${{ runner.os }}-v2
+          restore-keys: |
+            ccache-${{ matrix.target }}-${{ runner.os }}-
+            ccache-${{ matrix.target }}-
+
+# Install and configure ccache only if not cached
+      - name: Setup ccache
+        run: |
+          if ! command -v ccache &> /dev/null; then
+            echo "Installing ccache..."
+            sudo apt-get update
+            sudo apt-get install -y ccache
+          else
+            echo "ccache already available"
+          fi
+          ccache --set-config=max_size=200M
+          ccache --set-config=cache_dir=~/.ccache
+          ccache --zero-stats
+          echo "/usr/lib/ccache" >> $GITHUB_PATH
+
+      # Your existing build cache
       - name: Cache build output
         uses: actions/cache@v4
         with:
@@ -61,13 +90,6 @@ jobs:
           key: build-${{ matrix.target }}-${{ hashFiles('main/**/*.c', 'main/**/*.h', 'components/**', 'CMakeLists.txt', 'sdkconfig.${{ matrix.target }}') }}
           restore-keys: |
             build-${{ matrix.target }}-
-            
-      # Setup ccache for faster compilation
-      - name: Setup ccache
-        uses: hendrikmuhs/ccache-action@v1.4
-        with:
-          key: ccache-${{ matrix.target }}
-          max-size: 200M
           
       # ← MODIFIED: Build project with version embedded
       - name: Build project
