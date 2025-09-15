@@ -75,7 +75,7 @@ jobs:
               chmod +x temp_activate.sh
               
               # Now we can safely source it
-              source temp_activate.sh
+              source temp_activate.sh -e
               
               # Clean up
               rm temp_activate.sh
