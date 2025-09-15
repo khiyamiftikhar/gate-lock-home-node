@@ -72,12 +72,18 @@ jobs:
         run: |
           if [ "${{ steps.cache-esp-idf.outputs.cache-hit }}" = "true" ]; then
               echo "⚡ Cache hit – reusing ESP-IDF tools"
-          else
-              echo "⬇️ Fresh install will run later"
+              
+              # Copy and modify the activation script to use 'return' instead of 'exit'
+              cp $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh temp_activate.sh
+              sed -i 's/exit /return /g' temp_activate.sh
+              chmod +x temp_activate.sh
+              
+              # Now we can safely source it
+              source temp_activate.sh -e
+              
+              # Clean up
+              rm temp_activate.sh
           fi
-
-          # Always source activation (creates env vars, PATH, etc.)
-          source $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh -e
 
           # Ensure wrapper scripts exist (idf.py, esptool.py, etc.)
           echo "🔧 Making sure wrappers are in place..."
