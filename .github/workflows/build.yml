@@ -63,16 +63,22 @@ jobs:
           restore-keys: |
             build-${{ matrix.target }}-
           
+
       - name: Build project
         run: |
           if [ "${{ steps.cache-esp-idf.outputs.cache-hit }}" = "true" ]; then
               echo "⚡ Cache hit – reusing ESP-IDF tools"
               chmod +x $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh
-              bash -x $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh -e              
+              bash -x $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh -e
           fi
-          export CCACHE_DIR=$HOME/.ccache
-          echo "🔨 Building ${{ matrix.target }} with version ${{ env.VERSION }}"
-
+          
+          # Debug what's actually happening
+          echo "IDF_PATH: $IDF_PATH"
+          echo "Current PATH: $PATH"
+          echo "Looking for idf.py:"
+          find $IDF_PATH -name "idf.py" -type f || echo "idf.py not found in IDF_PATH"
+          ls -la $IDF_PATH/tools/idf.py || echo "No idf.py in tools directory"
+    
           idf.py -B build_${{ matrix.target }} \
                 -DIDF_TARGET=${{ matrix.target }} \
                 -DSDKCONFIG=sdkconfig.${{ matrix.target }} \
