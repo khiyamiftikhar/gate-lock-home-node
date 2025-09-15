@@ -144,7 +144,7 @@ jobs:
         with:
           name: ${{ matrix.target }}-firmware-${{ env.VERSION }}
           path: firmware_${{ matrix.target }}/
-          retention-days: 6
+          retention-days: 7
 
   # ← NEW: Create GitHub Release (only for tags)
   create-release:
