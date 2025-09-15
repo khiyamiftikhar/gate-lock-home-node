@@ -67,7 +67,7 @@ jobs:
       - name: Build project
         run: |
           set -x
-          source $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh -e
+          source $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh
           export CCACHE_DIR=$HOME/.ccache
           echo "🔨 Building ${{ matrix.target }} with version ${{ env.VERSION }}"
           # Build with target-specific configuration AND version
