@@ -7,6 +7,9 @@ on:
     branches:
       - main
 
+env:
+  ESP_IDF_VERSION: v5.4.2
+
 jobs:
   build:
     name: Build for ${{ matrix.target }}
@@ -18,53 +21,94 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      # Cache ESP-IDF installation
-      - name: Cache ESP-IDF
+      
+      # Target-specific ESP-IDF cache to avoid race conditions
+      - name: Cache ESP-IDF and tools
+        id: cache-esp-idf
         uses: actions/cache@v4
         with:
           path: |
             ${{ github.workspace }}/esp-idf
             ${{ github.workspace }}/esp-tools
-          key: esp-idf-${{ hashFiles('**/CMakeLists.txt') }}-${{ github.ref }}
+            ~/.espressif
+          key: esp-idf-${{ env.ESP_IDF_VERSION }}-${{ runner.os }}-${{ matrix.target }}
           restore-keys: |
-            esp-idf-
+            esp-idf-${{ env.ESP_IDF_VERSION }}-${{ runner.os }}-
+            esp-idf-${{ env.ESP_IDF_VERSION }}-
+        #if cache hit then setup ESPIDF enivornment so that build finds idf.py    
+      #- name: Setup ESP-IDF environment
+       # if: ${{ steps.cache-esp-idf.outputs.cache-hit == 'true' }}
+       # run: |
+        #  chmod +x $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh
+         # source $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh -e
 
-      # Install ESP-IDF to custom path
+
+      
+      # Install ESP-IDF (works for both cache hit and miss). Not installed on cache hit
       - name: Install ESP-IDF
+        if: ${{ !steps.cache-esp-idf.outputs.cache-hit }}
         uses: espressif/install-esp-idf-action@v1
         with:
-          version: v5.4.2
+          version: ${{ env.ESP_IDF_VERSION }}
           path: ${{ github.workspace }}/esp-idf
           tools-path: ${{ github.workspace }}/esp-tools
-
-      # Cache build output (target-specific)
+      
+      
+      # Your existing build cache
       - name: Cache build output
         uses: actions/cache@v4
         with:
           path: build_${{ matrix.target }}
-          key: build-${{ matrix.target }}-${{ hashFiles('main/**/*.c', 'main/**/*.h', 'components/**', 'CMakeLists.txt', 'sdkconfig.${{ matrix.target }}') }}
+          key: build-${{ matrix.target }}-${{ hashFiles('main/**/*', 'components/**/*', 'CMakeLists.txt', 'sdkconfig.${{ matrix.target }}', 'partitions.csv', 'Kconfig*', 'project_include.cmake') }}
           restore-keys: |
             build-${{ matrix.target }}-
-
-      # Setup ccache for faster compilation
-      - name: Setup ccache
-        uses: hendrikmuhs/ccache-action@v1.2
+      #required for build env set          
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          key: ccache-${{ matrix.target }}
-          max-size: 200M
+          python-version: '3.12'
 
-      # Build project with ccache optimizations
       - name: Build project
         run: |
-          export CCACHE_DIR=$HOME/.ccache
-          # Build with target-specific configuration
-          idf.py -B build_${{ matrix.target }} \
-                 -DIDF_TARGET=${{ matrix.target }} \
-                 -DSDKCONFIG=sdkconfig.${{ matrix.target }} \
-                 build
+          if [ "${{ steps.cache-esp-idf.outputs.cache-hit }}" = "true" ]; then
+              echo "⚡ display script"
+              
+              echo "⚡ script end"
+              echo "⚡ Cache hit – reusing ESP-IDF tools"
+              
+              # Copy and modify the activation script to use 'return' instead of 'exit'
+              cp $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh temp_activate.sh
+              sed -i 's/exit /return /g' temp_activate.sh
+              chmod +x temp_activate.sh
+              
+              # Now we can safely source it
+              source temp_activate.sh -e
+              
+              # Clean up
+              rm temp_activate.sh
+          fi
 
-      # Create comprehensive firmware package
+          # Ensure wrapper scripts exist (idf.py, esptool.py, etc.)
+          echo "🔧 Making sure wrappers are in place..."
+          echo "IDF_PATH='$IDF_PATH'"
+          
+
+          
+          
+          echo "$IDF_PYTHON_ENV_PATH='$IDF_PYTHON_ENV_PATH'"
+          # Activate python venv
+          
+          export CCACHE_DIR=$HOME/.ccache
+
+          echo "🔨 Building ${{ matrix.target }} with version ${{ env.VERSION }}"
+          /home/runner/work/gate-lock-home-node/gate-lock-home-node/esp-idf/v5.4.2/esp-idf/tools/idf.py \ -B build_${{ matrix.target }} \
+                -DIDF_TARGET=${{ matrix.target }} \
+                -DSDKCONFIG=sdkconfig.${{ matrix.target }} \
+                -DPROJECT_VER=${{ env.VERSION }} \
+                build
+
+                
+      # ← MODIFIED: Create comprehensive firmware package with version info
       - name: Create firmware package
         run: |
           mkdir -p firmware_${{ matrix.target }}
@@ -76,18 +120,96 @@ jobs:
           cp build_${{ matrix.target }}/flash_args firmware_${{ matrix.target }}/ 2>/dev/null || echo "flash_args not found, skipping"
           cp build_${{ matrix.target }}/flasher_args.json firmware_${{ matrix.target }}/ 2>/dev/null || echo "flasher_args.json not found, skipping"
           cp build_${{ matrix.target }}/project_description.json firmware_${{ matrix.target }}/ 2>/dev/null || echo "project_description.json not found, skipping"
+          
+          # ← ENHANCED: Add version info to flash_info.txt
           cat > firmware_${{ matrix.target }}/flash_info.txt << EOF
+          version=${{ env.VERSION }}
+          build_type=${{ env.BUILD_TYPE }}
           target=${{ matrix.target }}
           idf_version=v5.4.2
           build_time=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
           commit_sha=${{ github.sha }}
           workflow_run=${{ github.run_number }}
           EOF
-
-      # Upload firmware artifacts
+          
+      # ← NEW: Create OTA-ready firmware file (for releases only)
+      - name: Create OTA firmware file
+        if: env.IS_RELEASE == 'true'
+        run: |
+          # Copy main firmware binary with version in filename
+          cp build_${{ matrix.target }}/$(ls build_${{ matrix.target }}/ | grep "\.bin$" | grep -v bootloader | grep -v partition-table | head -1) \
+             firmware-ota-${{ matrix.target }}-${{ env.VERSION }}.bin
+          echo "📦 Created OTA file: firmware-ota-${{ matrix.target }}-${{ env.VERSION }}.bin"
+          ls -la firmware-ota-${{ matrix.target }}-${{ env.VERSION }}.bin
+          
+      # Upload firmware artifacts (regular workflow)
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.target }}-firmware
+          name: ${{ matrix.target }}-firmware-${{ env.VERSION }}
           path: firmware_${{ matrix.target }}/
           retention-days: 7
+
+  # ← NEW: Create GitHub Release (only for tags)
+  create-release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')  # Only run for version tags
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Get Version
+        run: |
+          VERSION=$(git describe --exact-match --tags HEAD)
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          
+      - name: Generate Changelog
+        run: |
+          # Get previous tag for changelog
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            echo "## Changes since $PREV_TAG:" > CHANGELOG.md
+            git log --oneline --no-merges $PREV_TAG..HEAD >> CHANGELOG.md
+          else
+            echo "## Initial Release" > CHANGELOG.md
+            echo "First tagged release of the firmware." >> CHANGELOG.md
+          fi
+          
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          
+      - name: Prepare release files
+        run: |
+          mkdir -p release_files
+          
+          # Create complete firmware packages (ZIP files for testing)
+          for target in esp32 esp32c3; do
+            if [ -d "artifacts/${target}-firmware-${{ env.VERSION }}" ]; then
+              cd "artifacts/${target}-firmware-${{ env.VERSION }}"
+              zip -r "../../release_files/firmware-complete-${target}-${{ env.VERSION }}.zip" .
+              cd ../..
+              echo "📦 Created: firmware-complete-${target}-${{ env.VERSION }}.zip"
+            fi
+          done
+          
+          # Move OTA files if they exist
+          find artifacts/ -name "firmware-ota-*-${{ env.VERSION }}.bin" -exec cp {} release_files/ \;
+          
+          ls -la release_files/
+          
+      - name: Create Draft Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: "${{ env.VERSION }} (⏳ Testing Required)"
+          body_path: CHANGELOG.md
+          draft: true  # ← IMPORTANT: Creates draft release
+          prerelease: false
+          files: release_files/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
