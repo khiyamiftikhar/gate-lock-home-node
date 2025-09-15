@@ -91,7 +91,7 @@ jobs:
           # Ensure wrapper scripts exist (idf.py, esptool.py, etc.)
           echo "🔧 Making sure wrappers are in place..."
           echo "IDF_PATH='$IDF_PATH'"
-          python3 $IDF_PATH/tools/idf_tools.py create_wrappers
+          
 
           # Double-check idf.py is on PATH
           which idf.py || { echo "❌ idf.py still missing!"; ls -la $HOME/.espressif/tools/*/*/bin || true; exit 1; }
