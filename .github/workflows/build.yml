@@ -62,33 +62,35 @@ jobs:
           key: build-${{ matrix.target }}-${{ hashFiles('main/**/*', 'components/**/*', 'CMakeLists.txt', 'sdkconfig.${{ matrix.target }}', 'partitions.csv', 'Kconfig*', 'project_include.cmake') }}
           restore-keys: |
             build-${{ matrix.target }}-
-          
+      #required for build env set          
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
       - name: Build project
         run: |
           if [ "${{ steps.cache-esp-idf.outputs.cache-hit }}" = "true" ]; then
               echo "⚡ Cache hit – reusing ESP-IDF tools"
-              
-              # Copy and modify the activation script to use 'return' instead of 'exit'
-              cp $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh temp_activate.sh
-              sed -i 's/exit /return /g' temp_activate.sh
-              chmod +x temp_activate.sh
-              
-              # Now we can safely source it
-              source temp_activate.sh -e
-              
-              # Clean up
-              rm temp_activate.sh
+          else
+              echo "⬇️ Fresh install will run later"
           fi
 
-          
-          # Debug what's actually happening
-          echo "IDF_PATH: $IDF_PATH"
-          echo "Current PATH: $PATH"
-          echo "Looking for idf.py:"
-          find $IDF_PATH -name "idf.py" -type f || echo "idf.py not found in IDF_PATH"
-          ls -la $IDF_PATH/tools/idf.py || echo "No idf.py in tools directory"
-    
+          # Always source activation (creates env vars, PATH, etc.)
+          source $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh -e
+
+          # Ensure wrapper scripts exist (idf.py, esptool.py, etc.)
+          echo "🔧 Making sure wrappers are in place..."
+          python3 $IDF_PATH/tools/idf_tools.py create_wrappers
+
+          # Double-check idf.py is on PATH
+          which idf.py || { echo "❌ idf.py still missing!"; ls -la $HOME/.espressif/tools/*/*/bin || true; exit 1; }
+
+          # Activate python venv
+          source $IDF_PYTHON_ENV_PATH/bin/activate
+          export CCACHE_DIR=$HOME/.ccache
+
+          echo "🔨 Building ${{ matrix.target }} with version ${{ env.VERSION }}"
           idf.py -B build_${{ matrix.target }} \
                 -DIDF_TARGET=${{ matrix.target }} \
                 -DSDKCONFIG=sdkconfig.${{ matrix.target }} \
