@@ -9,36 +9,25 @@ on:
 
 jobs:
   build:
-    name: Build for ${{ matrix.target }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
         target: [esp32, esp32c3]
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Cache ESP-IDF installation
-      - name: Cache ESP-IDF
+      # Cache ESP-IDF tools
+      - name: Cache ESP-IDF tools
         uses: actions/cache@v4
         with:
-          path: |
-            ${{ github.workspace }}/esp-idf
-            ${{ github.workspace }}/esp-tools
+          path: ${{ github.workspace }}/esp-idf
           key: esp-idf-${{ hashFiles('**/CMakeLists.txt') }}-${{ github.ref }}
           restore-keys: |
             esp-idf-
 
-      # Install ESP-IDF to custom path
-      - name: Install ESP-IDF
-        uses: espressif/install-esp-idf-action@v1
-        with:
-          version: v5.4.2
-          path: ${{ github.workspace }}/esp-idf
-          tools-path: ${{ github.workspace }}/esp-tools
-
-      # Cache build output (target-specific)
+      # Cache build output
       - name: Cache build output
         uses: actions/cache@v4
         with:
@@ -47,28 +36,19 @@ jobs:
           restore-keys: |
             build-${{ matrix.target }}-
 
-      # Setup ccache for faster compilation
-      - name: Setup ccache
-        uses: hendrikmuhs/ccache-action@v1.2
+      # Build project using official esp-idf-ci-action
+      - name: Build ${{ matrix.target }}
+        uses: espressif/esp-idf-ci-action@v1
         with:
-          key: ccache-${{ matrix.target }}
-          max-size: 200M
+          esp_idf_version: v5.4.2
+          target: ${{ matrix.target }}
+          path: .  # your project root
+          command: idf.py -B build_${{ matrix.target }} -DIDF_TARGET=${{ matrix.target }} -DSDKCONFIG=sdkconfig.${{ matrix.target }} build
 
-      # Build project with ccache optimizations
-      - name: Build project
-        run: |
-          export CCACHE_DIR=$HOME/.ccache
-          # Build with target-specific configuration
-          idf.py -B build_${{ matrix.target }} \
-                 -DIDF_TARGET=${{ matrix.target }} \
-                 -DSDKCONFIG=sdkconfig.${{ matrix.target }} \
-                 build
-
-      # Create comprehensive firmware package
-      - name: Create firmware package
+      # Archive firmware
+      - name: Archive firmware
         run: |
           mkdir -p firmware_${{ matrix.target }}
-          cp CMakeLists.txt firmware_${{ matrix.target }}/
           cp build_${{ matrix.target }}/*.bin firmware_${{ matrix.target }}/
           cp build_${{ matrix.target }}/*.elf firmware_${{ matrix.target }}/
           cp build_${{ matrix.target }}/partition_table/partition-table.bin firmware_${{ matrix.target }}/
@@ -84,8 +64,7 @@ jobs:
           workflow_run=${{ github.run_number }}
           EOF
 
-      # Upload firmware artifacts
-      - name: Archive firmware
+      - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}-firmware
