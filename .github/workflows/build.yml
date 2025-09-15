@@ -68,20 +68,8 @@ jobs:
           if [ "${{ steps.cache-esp-idf.outputs.cache-hit }}" = "true" ]; then
               echo "⚡ Cache hit – reusing ESP-IDF tools"
               chmod +x $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh
-              set +e
-              source $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh -e
-              set -e
-          else
-              echo "⬇️ Cache miss – using freshly installed ESP-IDF"
+              bash -x $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh -e              
           fi
-
-          echo "🔍 PATH after activation:"
-          echo "$PATH"
-
-          echo "🔍 Checking for idf.py..."
-          which idf.py || echo "❌ idf.py not found in PATH"
-          idf.py --version || echo "❌ idf.py not runnable"
-
           export CCACHE_DIR=$HOME/.ccache
           echo "🔨 Building ${{ matrix.target }} with version ${{ env.VERSION }}"
 
