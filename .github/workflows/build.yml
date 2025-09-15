@@ -68,9 +68,19 @@ jobs:
         run: |
           if [ "${{ steps.cache-esp-idf.outputs.cache-hit }}" = "true" ]; then
               echo "⚡ Cache hit – reusing ESP-IDF tools"
-              chmod +x $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh
-              bash -x $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh -e
+              
+              # Copy and modify the activation script to use 'return' instead of 'exit'
+              cp $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh temp_activate.sh
+              sed -i 's/exit /return /g' temp_activate.sh
+              chmod +x temp_activate.sh
+              
+              # Now we can safely source it
+              source temp_activate.sh
+              
+              # Clean up
+              rm temp_activate.sh
           fi
+
           
           # Debug what's actually happening
           echo "IDF_PATH: $IDF_PATH"
