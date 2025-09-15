@@ -93,9 +93,9 @@ jobs:
           echo "IDF_PATH='$IDF_PATH'"
           
 
-          # Double-check idf.py is on PATH
-          which idf.py || { echo "❌ idf.py still missing!"; ls -la $HOME/.espressif/tools/*/*/bin || true; exit 1; }
-
+          
+          
+          echo "$IDF_PYTHON_ENV_PATH='$IDF_PYTHON_ENV_PATH'"
           # Activate python venv
           source $IDF_PYTHON_ENV_PATH/bin/activate
           export CCACHE_DIR=$HOME/.ccache
