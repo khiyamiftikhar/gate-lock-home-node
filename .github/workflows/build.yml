@@ -53,34 +53,7 @@ jobs:
           path: ${{ github.workspace }}/esp-idf
           tools-path: ${{ github.workspace }}/esp-tools
       
-      # Cache ccache compilation cache only
-      - name: Cache ccache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.ccache
-          key: ccache-${{ matrix.target }}-${{ runner.os }}-v3
-          restore-keys: |
-            ccache-${{ matrix.target }}-${{ runner.os }}-
-            ccache-${{ matrix.target }}-
-
-      # Install and configure ccache
-      - name: Setup ccache
-        run: |
-          if ! command -v ccache &> /dev/null; then
-            echo "Installing ccache..."
-            sudo apt-get update
-            sudo apt-get install -y ccache
-          else
-            echo "ccache already available"
-          fi
-          # Create ccache directory if it doesn't exist
-          mkdir -p ~/.ccache
-          ccache --set-config=max_size=200M
-          ccache --set-config=cache_dir=~/.ccache
-          ccache --zero-stats
-          echo "/usr/lib/ccache" >> $GITHUB_PATH
-
+      
       # Your existing build cache
       - name: Cache build output
         uses: actions/cache@v4
