@@ -66,20 +66,29 @@ jobs:
       # ← MODIFIED: Build project with version embedded
       - name: Build project
         run: |
+          # If cache hit, activate from cached tools
           if [ "${{ steps.cache-esp-idf.outputs.cache-hit }}" = "true" ]; then
+              echo "⚡ Cache hit – reusing ESP-IDF tools"
               chmod +x $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh
               source $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh -e
+          else
+              echo "⬇️ Cache miss – relying on freshly installed ESP-IDF environment"
           fi
-          source $IDF_PYTHON_ENV_PATH/bin/activate
+
+          # Debug: show where idf.py is coming from
+          echo "🔍 Checking ESP-IDF environment..."
+          which idf.py || echo "❌ idf.py not found in PATH"
+          idf.py --version || echo "❌ idf.py not runnable"
+
           export CCACHE_DIR=$HOME/.ccache
           echo "🔨 Building ${{ matrix.target }} with version ${{ env.VERSION }}"
-          # Build with target-specific configuration AND version
+
           idf.py -B build_${{ matrix.target }} \
-                 -DIDF_TARGET=${{ matrix.target }} \
-                 -DSDKCONFIG=sdkconfig.${{ matrix.target }} \
-                 -DPROJECT_VER=${{ env.VERSION }} \
-                 build
-                 
+                -DIDF_TARGET=${{ matrix.target }} \
+                -DSDKCONFIG=sdkconfig.${{ matrix.target }} \
+                -DPROJECT_VER=${{ env.VERSION }} \
+                build
+                
       # ← MODIFIED: Create comprehensive firmware package with version info
       - name: Create firmware package
         run: |
