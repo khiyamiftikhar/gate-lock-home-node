@@ -72,7 +72,7 @@ jobs:
         run: |
           if [ "${{ steps.cache-esp-idf.outputs.cache-hit }}" = "true" ]; then
               echo "⚡ display script"
-              cat $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh
+              
               echo "⚡ script end"
               echo "⚡ Cache hit – reusing ESP-IDF tools"
               
@@ -101,7 +101,7 @@ jobs:
           export CCACHE_DIR=$HOME/.ccache
 
           echo "🔨 Building ${{ matrix.target }} with version ${{ env.VERSION }}"
-          idf.py -B build_${{ matrix.target }} \
+          /home/runner/work/gate-lock-home-node/gate-lock-home-node/esp-idf/v5.4.2/esp-idf/tools/idf.py \ -B build_${{ matrix.target }} \
                 -DIDF_TARGET=${{ matrix.target }} \
                 -DSDKCONFIG=sdkconfig.${{ matrix.target }} \
                 -DPROJECT_VER=${{ env.VERSION }} \
