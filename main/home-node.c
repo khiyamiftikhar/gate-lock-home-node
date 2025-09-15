@@ -132,7 +132,7 @@ void app_main(void)
     discovery_timer_implementation_t* timer_interface=timer_create(DISCOVERY_INTERVAL);
 
     if(timer_interface==NULL)
-        ESP_LOGI(TAG,"timer init failed");
+        ESP_LOGI(TAG,"timer init has failed");
 
     config_espnow_discovery discovery_config;
     //Must be an instance because config contains a pointer to it and 
