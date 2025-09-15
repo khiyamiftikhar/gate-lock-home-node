@@ -71,6 +71,9 @@ jobs:
       - name: Build project
         run: |
           if [ "${{ steps.cache-esp-idf.outputs.cache-hit }}" = "true" ]; then
+              echo "⚡ display script"
+              cat $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh
+              echo "⚡ script end"
               echo "⚡ Cache hit – reusing ESP-IDF tools"
               
               # Copy and modify the activation script to use 'return' instead of 'exit'
