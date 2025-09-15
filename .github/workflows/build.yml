@@ -70,7 +70,7 @@ jobs:
               chmod +x $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh
               source $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh -e
           fi
-          source $HOME/.espressif/tools/activate_idf_${{ env.ESP_IDF_VERSION }}.sh
+          source $IDF_PYTHON_ENV_PATH/bin/activate
           export CCACHE_DIR=$HOME/.ccache
           echo "🔨 Building ${{ matrix.target }} with version ${{ env.VERSION }}"
           # Build with target-specific configuration AND version
