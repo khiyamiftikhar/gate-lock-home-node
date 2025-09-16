@@ -11,7 +11,6 @@ on:
 
 jobs:
   build:
-    name: Build for ${{ matrix.target }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -61,22 +60,12 @@ jobs:
       - name: Cache ESP-IDF
         uses: actions/cache@v4
         with:
-          path: |
-            ${{ github.workspace }}/esp-idf
-            ${{ github.workspace }}/esp-tools
+          path: ${{ github.workspace }}/esp-idf
           key: esp-idf-${{ hashFiles('**/CMakeLists.txt') }}-${{ github.ref }}
           restore-keys: |
             esp-idf-
-            
-      # Install ESP-IDF to custom path
-      - name: Install ESP-IDF
-        uses: espressif/install-esp-idf-action@v1
-        with:
-          version: v5.4.2
-          path: ${{ github.workspace }}/esp-idf
-          tools-path: ${{ github.workspace }}/esp-tools
-          
-      # Cache build output (target-specific)
+
+      # Cache build output
       - name: Cache build output
         uses: actions/cache@v4
         with:
@@ -84,31 +73,20 @@ jobs:
           key: build-${{ matrix.target }}-${{ hashFiles('main/**/*.c', 'main/**/*.h', 'components/**', 'CMakeLists.txt', 'sdkconfig.${{ matrix.target }}') }}
           restore-keys: |
             build-${{ matrix.target }}-
-            
-      # Setup ccache for faster compilation
-      - name: Setup ccache
-        uses: hendrikmuhs/ccache-action@v1.2
+
+      # Build project using official esp-idf-ci-action
+      - name: Build ${{ matrix.target }}
+        uses: espressif/esp-idf-ci-action@v1
         with:
-          key: ccache-${{ matrix.target }}
-          max-size: 200M
-          
-      # ← MODIFIED: Build project with version embedded
-      - name: Build project
-        run: |
-          export CCACHE_DIR=$HOME/.ccache
-          echo "🔨 Building ${{ matrix.target }} with version ${{ env.VERSION }}"
-          # Build with target-specific configuration AND version
-          idf.py -B build_${{ matrix.target }} \
-                 -DIDF_TARGET=${{ matrix.target }} \
-                 -DSDKCONFIG=sdkconfig.${{ matrix.target }} \
-                 -DPROJECT_VER=${{ env.VERSION }} \
-                 build
-                 
-      # ← MODIFIED: Create comprehensive firmware package with version info
-      - name: Create firmware package
+          esp_idf_version: v5.4.2
+          target: ${{ matrix.target }}
+          path: .  # your project root
+          command: idf.py -B build_${{ matrix.target }} -DIDF_TARGET=${{ matrix.target }} -DSDKCONFIG=sdkconfig.${{ matrix.target }} build
+
+      # Archive firmware
+      - name: Archive firmware
         run: |
           mkdir -p firmware_${{ matrix.target }}
-          cp CMakeLists.txt firmware_${{ matrix.target }}/
           cp build_${{ matrix.target }}/*.bin firmware_${{ matrix.target }}/
           cp build_${{ matrix.target }}/*.elf firmware_${{ matrix.target }}/
           cp build_${{ matrix.target }}/partition_table/partition-table.bin firmware_${{ matrix.target }}/
