@@ -117,6 +117,7 @@ jobs:
       # Keep ALL your existing steps exactly as they are, just REPLACE this one step:
 
       - name: Create Draft Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
           name: "${{ env.VERSION }}"  # ← Removed "(⏳ Testing Required)"
@@ -129,6 +130,7 @@ jobs:
 
       # ← ADD this new step AFTER the release creation
       - name: Deploy Professional OTA
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
           # Setup git for gh-pages
           git config --global user.name "OTA Deploy Bot"
