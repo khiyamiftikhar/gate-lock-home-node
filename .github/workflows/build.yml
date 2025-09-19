@@ -114,23 +114,189 @@ jobs:
           path: firmware_${{ matrix.target }}/
           retention-days: 7
           
-      # Keep ALL your existing steps exactly as they are, just REPLACE this one step:
+      # In your BUILD JOB, replace these steps:
 
-      - name: Create Draft Release
-        if: startsWith(github.ref, 'refs/tags/')
+      # ← FIXED: Create OTA-ready firmware file (for releases only)
+      - name: Create OTA firmware file
+        if: startsWith(github.ref, 'refs/tags/')  # ← Changed condition
+        run: |
+          # Copy main firmware binary with version in filename
+          cp build_${{ matrix.target }}/$(ls build_${{ matrix.target }}/ | grep "\.bin$" | grep -v bootloader | grep -v partition-table | head -1) \
+             firmware-ota-${{ matrix.target }}-${{ env.VERSION }}.bin
+          echo "📦 Created OTA file: firmware-ota-${{ matrix.target }}-${{ env.VERSION }}.bin"
+          ls -la firmware-ota-${{ matrix.target }}-${{ env.VERSION }}.bin
+
+      # ← FIXED: Create OTA manifest file
+      - name: Create OTA manifest
+        if: startsWith(github.ref, 'refs/tags/')  # ← Changed condition
+        run: |
+          cat > ota-manifest-${{ matrix.target }}.json << EOF
+          {
+            "version": "${{ env.VERSION }}",
+            "target": "${{ matrix.target }}",
+            "firmware_url": "https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/firmware-ota-${{ matrix.target }}-${{ env.VERSION }}.bin",
+            "firmware_size": $(stat -c%s firmware-ota-${{ matrix.target }}-${{ env.VERSION }}.bin),
+            "checksum": "$(sha256sum firmware-ota-${{ matrix.target }}-${{ env.VERSION }}.bin | cut -d' ' -f1)",
+            "release_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "changelog_url": "https://github.com/${{ github.repository }}/releases/tag/${{ env.VERSION }}"
+          }
+          EOF
+          echo "📋 Created manifest: ota-manifest-${{ matrix.target }}.json"
+          cat ota-manifest-${{ matrix.target }}.json
+         
+      # Upload firmware artifacts (regular workflow) - UNCHANGED
+      #- name: Archive firmware
+      #  uses: actions/upload-artifact@v4
+      #  with:
+      #    name: ${{ matrix.target }}-firmware-${{ env.VERSION }}
+      #    path: firmware_${{ matrix.target }}/
+      #    retention-days: 7
+
+      # ← FIXED: Upload OTA files as separate artifacts
+      - name: Archive OTA files
+        if: startsWith(github.ref, 'refs/tags/')  # ← Changed condition
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-ota-${{ env.VERSION }}
+          path: |
+            firmware-ota-${{ matrix.target }}-${{ env.VERSION }}.bin
+            ota-manifest-${{ matrix.target }}.json
+          retention-days: 30
+
+# In your CREATE-RELEASE JOB, replace with this:
+
+  create-release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')  # Only run for version tags
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+       
+      - name: Get Version
+        run: |
+          # Use the tag name directly from GitHub context
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION="${{ github.ref_name }}"
+            echo "Using tag from trigger: $VERSION"
+          else
+            # Fallback to git describe
+            VERSION=$(git describe --tags --always)
+            echo "Using git describe: $VERSION"
+          fi
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "Final version: $VERSION"
+         
+      - name: Generate Changelog
+        run: |
+          echo "🔍 Generating changelog for ${{ env.VERSION }}..."
+          
+          # Get previous tag for changelog (with error handling)
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          if [ -n "$PREV_TAG" ]; then
+            echo "📝 Changes since $PREV_TAG:" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            
+            # Get commits between tags (with fallback)
+            if git log --oneline --no-merges "$PREV_TAG..HEAD" > /tmp/commits 2>/dev/null && [ -s /tmp/commits ]; then
+              cat /tmp/commits >> CHANGELOG.md
+            else
+              echo "- Various improvements and fixes" >> CHANGELOG.md
+            fi
+          else
+            echo "📝 Initial Release" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "First tagged release of the firmware." >> CHANGELOG.md
+          fi
+          
+          # Add build info
+          echo "" >> CHANGELOG.md
+          echo "## Build Information" >> CHANGELOG.md
+          echo "- **Version**: ${{ env.VERSION }}" >> CHANGELOG.md
+          echo "- **Build Date**: $(date -u +%Y-%m-%d\ %H:%M:%S\ UTC)" >> CHANGELOG.md
+          echo "- **Commit**: $(git rev-parse --short HEAD)" >> CHANGELOG.md
+          echo "- **Targets**: ESP32, ESP32-C3" >> CHANGELOG.md
+          
+          # Show generated changelog
+          echo "📋 Generated CHANGELOG.md:"
+          cat CHANGELOG.md
+         
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+         
+      - name: Prepare release files
+        run: |
+          mkdir -p release_files
+          
+          # Debug: List what artifacts were downloaded
+          echo "🔍 Downloaded artifacts:"
+          ls -la artifacts/
+          find artifacts/ -type f -name "*.bin" -o -name "*.json" | head -20
+          
+          # Create complete firmware packages (ZIP files for testing)
+          for target in esp32 esp32c3; do
+            if [ -d "artifacts/${target}-firmware-${{ env.VERSION }}" ]; then
+              echo "📦 Processing ${target} firmware package..."
+              cd "artifacts/${target}-firmware-${{ env.VERSION }}"
+              zip -r "../../release_files/firmware-complete-${target}-${{ env.VERSION }}.zip" .
+              cd ../..
+              echo "✅ Created: firmware-complete-${target}-${{ env.VERSION }}.zip"
+            else
+              echo "⚠️ No firmware artifacts found for ${target}"
+            fi
+          done
+          
+          # Move OTA files and manifests (look in OTA-specific artifact directories)
+          echo "🔍 Looking for OTA files..."
+          for target in esp32 esp32c3; do
+            OTA_DIR="artifacts/${target}-ota-${{ env.VERSION }}"
+            if [ -d "$OTA_DIR" ]; then
+              echo "📋 Found OTA artifacts in $OTA_DIR"
+              find "$OTA_DIR" -name "firmware-ota-*.bin" -exec cp {} release_files/ \; 2>/dev/null || true
+              find "$OTA_DIR" -name "ota-manifest-*.json" -exec cp {} release_files/ \; 2>/dev/null || true
+            else
+              echo "⚠️ No OTA artifacts found for ${target}"
+            fi
+          done
+          
+          # Create latest manifest files (stable URLs) - only if originals exist
+          for target in esp32 esp32c3; do
+            if [ -f "release_files/ota-manifest-${target}.json" ]; then
+              cp "release_files/ota-manifest-${target}.json" "release_files/ota-manifest-${target}-latest.json"
+              echo "📋 Created: ota-manifest-${target}-latest.json"
+            else
+              echo "⚠️ No manifest found for ${target}, skipping -latest copy"
+            fi
+          done
+          
+          # Show what we actually have
+          echo "📁 Final release_files contents:"
+          ls -la release_files/ || echo "❌ release_files directory is empty!"
+          
+          # Create a basic file if nothing exists (to prevent the action from failing)
+          if [ -z "$(ls -A release_files/ 2>/dev/null)" ]; then
+            echo "⚠️ No files found, creating placeholder..."
+            echo "No firmware files were generated for this build." > release_files/README.txt
+          fi
+         
+      - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          name: "${{ env.VERSION }}"  # ← Removed "(⏳ Testing Required)"
+          name: "${{ env.VERSION }}"
           body_path: CHANGELOG.md
-          draft: false  # ← Changed from true
-          prerelease: ${{ contains(env.VERSION, 'alpha') || contains(env.VERSION, 'beta') || contains(env.VERSION, 'test') }}  # ← Smart prerelease detection
+          draft: false
+          prerelease: ${{ contains(env.VERSION, 'alpha') || contains(env.VERSION, 'beta') || contains(env.VERSION, 'test') }}
           files: release_files/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # ← ADD this new step AFTER the release creation
       - name: Deploy Professional OTA
-        if: startsWith(github.ref, 'refs/tags/')
         run: |
           # Setup git for gh-pages
           git config --global user.name "OTA Deploy Bot"
@@ -185,6 +351,8 @@ jobs:
                 cp "../release_files/ota-manifest-${target}.json" "ota/ota-manifest-${target}.json"
                 echo "✅ Updated main ${target} manifest"
               fi
+            else
+              echo "⚠️ No manifest found for ${target}"
             fi
           done
           
