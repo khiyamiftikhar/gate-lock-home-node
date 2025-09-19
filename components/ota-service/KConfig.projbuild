@@ -1,0 +1,13 @@
+menu "OTA SERVICE"
+
+
+    config FIRMWARE_URL
+        string "url"
+        default "https://github.com/khiyamiftikhar/gate-lock-home-node/releases/tag/"
+
+    config AUTO_CHECK_DURATION
+        int "duration_in_hrs"
+        default 24
+
+
+endmenu
