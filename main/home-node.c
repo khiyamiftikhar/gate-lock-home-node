@@ -18,7 +18,7 @@
 #include "user_output.h"
 #include "smartconfig.h"
 #include "server_adapter.h"
-
+#include "ota_service.h"
 
 #define     ESPNOW_CHANNEL          1
 #define     DISCOVERY_DURATION      15000    //ms
@@ -107,6 +107,7 @@ void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 
+    esp_err_t ota_err=ota_service_init();
     uint8_t primary;
     wifi_second_chan_t second;
     ESP_ERROR_CHECK(esp_wifi_get_channel(&primary, &second));
@@ -228,7 +229,10 @@ void app_main(void)
     //user_command=home_node->user_command_callback_handler;
 
     start_discovery();
-
+    
+    //If OTA validation pending then validate now
+    if(ota_err==ERR_OTA_SERVICE_VALIDATION_PENDING)
+        ota_set_valid(true);
     while(1){
         //user_command(USER_COMMAND_LOCK_CLOSE);
         vTaskDelay(pdMS_TO_TICKS(5000));
