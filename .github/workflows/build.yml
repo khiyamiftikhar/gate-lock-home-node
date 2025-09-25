@@ -428,6 +428,7 @@ jobs:
           EOF
           
           # Commit and deploy
+          touch .nojekyll
           git add .
           if ! git diff --staged --quiet; then
             git commit -m "Deploy OTA ${{ env.VERSION }} to ${CHANNEL} channel"
