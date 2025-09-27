@@ -100,6 +100,12 @@ static void infinite_loop(void)
 }
 
 
+
+
+esp_err_t _http_event_handler(esp_http_client_event_t *evt){    
+}
+
+
 // assume this is allocated globally or in your OTA state struct
 
 static esp_err_t fetch_ota_manifest(const char *manifest_url,manifest_t* manifest) {
@@ -114,7 +120,7 @@ static esp_err_t fetch_ota_manifest(const char *manifest_url,manifest_t* manifes
 
     // set new url for this request
     esp_http_client_set_url(client, manifest_url);
-
+    ESP_LOGI(TAG,"url %s",manifest_url);
     esp_err_t err = esp_http_client_open(client, 0);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "open failed: %s", esp_err_to_name(err));
@@ -324,7 +330,10 @@ static void ota_task(void *pvParameter)
         if(is_update_available(manifest->version)!=ESP_OK)
             continue;
 
+        ESP_LOGI(TAG,"url %s",manifest->firmware_url);
         
+        esp_http_client_set_url(client,manifest->firmware_url);
+        esp_http_client_set_redirection(client);
         err = esp_http_client_open(client, 0);
         //If unable to open connection then too skip an go back to waiting
         if (err != ESP_OK) {
@@ -333,8 +342,40 @@ static void ota_task(void *pvParameter)
             continue;
             //task_fatal_error();
         }
-        esp_http_client_fetch_headers(client);
+        int content_length=esp_http_client_fetch_headers(client);
 
+        //Added below because of git redirection
+        int status_code = esp_http_client_get_status_code(client);
+    
+        ESP_LOGI(TAG, "HTTP Status: %d, Content-Length: %d", status_code, content_length);
+        
+        // Handle redirect responses - NOW call esp_http_client_set_redirection()
+        if (status_code == 302 || status_code == 301) {//If redirection
+            ESP_LOGI(TAG, "Got redirect response, following redirect...");
+            
+            esp_http_client_close(client);
+            
+            // CORRECT USAGE: Call set_redirection AFTER receiving 30x response
+            err = esp_http_client_set_redirection(client);
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to set redirection: %s", esp_err_to_name(err));
+                continue;
+            }
+            
+            // Now open the redirected URL
+            err = esp_http_client_open(client, 0);
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to open redirected connection: %s", esp_err_to_name(err));
+                esp_http_client_close(client);
+                continue;
+            }
+            
+            content_length = esp_http_client_fetch_headers(client);
+            status_code = esp_http_client_get_status_code(client);
+            ESP_LOGI(TAG, "After redirect - Status: %d, Content-Length: %d", status_code, content_length);
+        }
+        
+        
         update_partition = esp_ota_get_next_update_partition(NULL);
         //assert(update_partition != NULL);
         //Gp back to waiting if update partition is NULL
@@ -352,6 +393,7 @@ static void ota_task(void *pvParameter)
         bool read_success=false;
         while (1) {
             int data_read = esp_http_client_read(client, ota_write_data, MAX_HTTP_RECV_BUFFER);
+            ESP_LOGI(TAG,"data read length %d",data_read);
             if (data_read < 0) {
                 ESP_LOGE(TAG, "Error: SSL data read error");
                 read_success=false;
@@ -496,11 +538,33 @@ esp_err_t ota_set_valid(bool valid){
 esp_err_t ota_service_init(){
     ESP_LOGI(TAG, "OTA example app_main start");
 
+esp_http_client_config_t config={0};
+
+    config.url = "http://example.com";    //Some random address which will be replaced before request
+    config.cert_pem = (char *)server_cert_pem_start;
+    config.timeout_ms = OTA_RECV_TIMEOUT;
+    config.keep_alive_enable = true;
+    config.buffer_size = 8192;    // Explicity supplied large value instead of not setting it and thus using default size, because github is sending a big header in responce which contains redirect url
+    config.buffer_size_tx = 512;  // request side can stay small
+    config.disable_auto_redirect=true;
+    config.event_handler=_http_event_handler;
+
+
+    esp_http_client_handle_t* client = &ota_service_state.client;
+    *client = esp_http_client_init(&config);
+    if (*client == NULL) {
+        ESP_LOGE(TAG, "Failed to initialise HTTP connection");
+        return ERR_OTA_SERVICE_INIT_FAIL;
+    }
+ 
+
      ota_service_state.start_update=xSemaphoreCreateBinary();
 
     if(ota_service_state.start_update==NULL)
         return ERR_OTA_SERVICE_INIT_FAIL;
 
+ 
+    //Task creation at end so that the client handle and semaphore are created before it
     BaseType_t ret;
     ret=xTaskCreate(&ota_task, "ota_task", 8192, NULL, 5, NULL);
     if(ret==pdFAIL)
@@ -510,20 +574,6 @@ esp_err_t ota_service_init(){
 
 
 
-    esp_http_client_config_t config = {
-        .url = "http://example.com",    //Some random address which will be replaced before request
-        .cert_pem = (char *)server_cert_pem_start,
-        .timeout_ms = OTA_RECV_TIMEOUT,
-        .keep_alive_enable = true,
-    };
-
-
-    esp_http_client_handle_t* client = &ota_service_state.client;
-    *client = esp_http_client_init(&config);
-    if (*client == NULL) {
-        ESP_LOGE(TAG, "Failed to initialise HTTP connection");
-        return ERR_OTA_SERVICE_INIT_FAIL;
-    }
     
     /*
     if (client == NULL) {
