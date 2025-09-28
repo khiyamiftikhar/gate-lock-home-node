@@ -136,14 +136,14 @@ static esp_err_t big_data_handler(const char *chunk, int len, void *ctx){
       
         if (len > 0) {
             if (ota_ctx->image_header_checked == false) {
-                esp_app_desc_t new_app_info;
+                //esp_app_desc_t new_app_info;
                 if (len > sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t) + sizeof(esp_app_desc_t)){
                     
                     
                     //This code of checking header is redundant because version is checked using manifest
                  
-                    memcpy(&new_app_info, &ota_write_data[sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t)], sizeof(esp_app_desc_t));
-                    ESP_LOGI(TAG, "New firmware version: %s", new_app_info.version);
+                  //  memcpy(&new_app_info, &ota_write_data[sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t)], sizeof(esp_app_desc_t));
+                   // ESP_LOGI(TAG, "New firmware version: %s", new_app_info.version);
 
                     //Commented because then running partition must be added to context
                    // esp_app_desc_t running_app_info;
