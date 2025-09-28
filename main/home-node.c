@@ -14,7 +14,6 @@
 #include "discovery_timer.h"
 #include "peer_registry.h"
 #include "home_node.h"
-#include "user_buttons.h"
 #include "user_output.h"
 #include "smartconfig.h"
 #include "server_adapter.h"
