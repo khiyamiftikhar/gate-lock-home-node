@@ -143,9 +143,9 @@ static esp_err_t big_data_handler(const char *chunk, int len, void *ctx){
                     //This code of checking header is redundant because version is checked using manifest
                  
                     memcpy(&new_app_info, &ota_write_data[sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t)], sizeof(esp_app_desc_t));
-                    ESP_LOGI(TAG, "New firmware version: %s", new_app_info.version);
+                    ESP_LOGI(TAG, "New firmware version:");
 
-                    //Commented because then running partition must be added to context
+                        //Commented because then running partition must be added to context
                     //esp_app_desc_t running_app_info;
                     //if (esp_ota_get_partition_description(running, &running_app_info) == ESP_OK) {
                       //  ESP_LOGI(TAG, "Running firmware version: %s", running_app_info.version);
