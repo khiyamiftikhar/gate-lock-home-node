@@ -9,7 +9,6 @@
 #include <string.h>
 #include <inttypes.h>
 #include <stdbool.h>
-#include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/timers.h"
@@ -44,18 +43,6 @@ typedef struct {
         bool update_available;
 } manifest_t;
 
-typedef esp_err_t (*big_data_handler_t)(const char *chunk, int len, void *ctx);
-typedef struct{
-    esp_partition_t *update_partition;
-    char* buffer;
-    int length;         //length of data written. used 2 times, in state struct and in this because necessary as big data handler only gets this context
-    esp_ota_handle_t* update_handle;
-    bool image_header_checked;
-    bool ota_started;
-    bool ota_finished;
-    int bytes_written;
-}ota_context_t;
-
 
 static struct{
     //char ota_write_data[BUFFSIZE + 1];
@@ -64,14 +51,7 @@ static struct{
     bool update_pending;            //The ota_task will set it true if it gets paused because of validation pending
     esp_http_client_handle_t client;
     char response_buffer[MAX_HTTP_RECV_BUFFER];
-    int data_len;
     manifest_t manifest;
-    bool saw_finish;
-    bool expect_redirect;
-    bool checked_status;
-    big_data_handler_t big_data_handler;  //When content length is greater than buffer size (firmware file)
-    ota_context_t ota_context;
-    
     //TimerHandle_t timer;
     
 }ota_service_state={0};
@@ -121,171 +101,8 @@ static void infinite_loop(void)
 
 
 
-static esp_err_t big_data_handler(const char *chunk, int len, void *ctx){
-
-    
-        //int len = esp_http_client_read(client, ota_write_data, MAX_HTTP_RECV_BUFFER);
-        esp_err_t err=0;
-        ota_context_t* ota_ctx=(ota_context_t*)ctx;
-        char* ota_write_data=ota_ctx->buffer;
-        esp_partition_t* update_partition=ota_ctx->update_partition;
-        esp_ota_handle_t* update_handle = ota_ctx->update_handle;
 
 
-        //ESP_LOGI(TAG,"data read length %d",len);
-      
-        if (len > 0) {
-            if (ota_ctx->image_header_checked == false) {
-                esp_app_desc_t new_app_info;
-                if (len > sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t) + sizeof(esp_app_desc_t)){
-                    
-                    
-                    //This code of checking header is redundant because version is checked using manifest
-                 
-                    memcpy(&new_app_info, &ota_write_data[sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t)], sizeof(esp_app_desc_t));
-                    ESP_LOGI(TAG, "New firmware version:");
-
-                        //Commented because then running partition must be added to context
-                    //esp_app_desc_t running_app_info;
-                    //if (esp_ota_get_partition_description(running, &running_app_info) == ESP_OK) {
-                      //  ESP_LOGI(TAG, "Running firmware version: %s", running_app_info.version);
-                   // }
-
-                    ota_ctx->image_header_checked = true;
-
-                    err = esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES, update_handle);
-                    if (err != ESP_OK) {
-                        ESP_LOGE(TAG, "esp_ota_begin failed (%s)", esp_err_to_name(err));
-                        
-                        
-                        //Actually the policy is to continue but continue in this nested, so break and then continue
-                        return ESP_FAIL;
-                        //task_fatal_error();
-                    }
-                    ota_ctx->ota_started=true;
-                    ESP_LOGI(TAG, "esp_ota_begin succeeded");
-                } 
-                //The header must be read as a whole not chunks (needs improvement in future). So consider it fail if len<header size
-                else {
-                    ESP_LOGE(TAG, "received package is not fit len");
-                    return ESP_FAIL;
-                }
-            }
-            
-            //If the break statement didnt run it means data read > header size so write as ota
-            //ESP_LOGI(TAG, "Writing to partition subtype %d at offset 0x%"PRIx32,
-              //  update_partition->subtype, update_partition->address);
-            err = esp_ota_write( *update_handle, (const void *)chunk, len);
-            if (err != ESP_OK) {
-                esp_ota_abort(*update_handle);
-                ota_ctx->ota_finished=false;
-                return ESP_FAIL;
-            }
-            ota_ctx->length += len;
-            ESP_LOGD(TAG, "Written image length %d", ota_ctx->length);
-        } 
-        
-    return ESP_OK;
-}
-
-
-
-
-
-
-
-
-static esp_err_t _http_event_handler(esp_http_client_event_t *evt) {
-    
-    //Since ota_service_state is a static struct so there is not type for it
-    //The state can be accessed globally, but instead using it this way will make this handler resuable
-    typeof(ota_service_state)* ctx= (typeof(ota_service_state)*) evt->user_data;
-
-    //ESP_LOGI(TAG, "ctx ptr=%p expect_redirect=%d", ctx, ctx ? ctx->expect_redirect : -1);
-    switch (evt->event_id) {
-
-    case HTTP_EVENT_ON_HEADER:
-        if (strcasecmp(evt->header_key, "Location") == 0) {
-            // Copy redirect URL (full header value is available)
-            ESP_LOGI(TAG,"location");
-            //ESP_LOGI(TAG, "Header: %s = %s", evt->header_key, evt->header_value);
-            strncpy(ctx->response_buffer, evt->header_value, MAX_HTTP_RECV_BUFFER - 1);
-            ctx->response_buffer[MAX_HTTP_RECV_BUFFER - 1] = '\0';
-            ctx->data_len = strlen(ctx->response_buffer);
-            ctx->expect_redirect=true;
-            ESP_LOGI(TAG,"leaving location");
-        }
-        break;
-
-    case HTTP_EVENT_ON_DATA: {
-        // First time we see data → check status
-        
-        
-        int status = esp_http_client_get_status_code(evt->client);
-
-        if(status >= 300 && status < 400)
-            break;
-        
-
-        else if (ctx->expect_redirect) {
-            // ignore body on redirect
-            break;
-        }
-
-        //ESP_LOGI(TAG,"proceeding for data");
-
-        int content_length = esp_http_client_get_content_length(evt->client);
-
-        if ((content_length > MAX_HTTP_RECV_BUFFER || content_length == -1) && ctx->big_data_handler) {
-            // Stream chunks directly
-            //This is yet another user ctx for the big data. useful here for maintaning index
-            esp_err_t res = ctx->big_data_handler(evt->data, evt->data_len,(void*)&ctx->ota_context);
-            if (res != ESP_OK) {
-                ESP_LOGE("HTTP", "Big data handler failed → aborting");
-                return res;
-            }
-        } else {
-            // Accumulate into local buffer
-            if (ctx->data_len + evt->data_len < MAX_HTTP_RECV_BUFFER) {
-                memcpy(ctx->response_buffer + ctx->data_len, evt->data, evt->data_len);
-                ctx->data_len += evt->data_len;
-                ctx->response_buffer[ctx->data_len] = '\0';
-            } else {
-                ESP_LOGE("HTTP", "Buffer overflow risk, aborting");
-                return ESP_FAIL;
-            }
-        }
-        break;
-    }
-        
-    case HTTP_EVENT_ON_FINISH:
-        if(ctx->ota_context.ota_started==true){
-            //OTA finished successfully
-            ctx->ota_context.ota_finished=true;
-        }
-        ctx->saw_finish = true;
-        break;
-
-    case HTTP_EVENT_DISCONNECTED:
-
-        //If disconnet comes before finish then its a  problem
-        if (!ctx->saw_finish && ctx->ota_context.ota_started==true) {
-            esp_ota_abort(*ctx->ota_context.update_handle);
-            return ESP_FAIL;
-        }
-
-        else if (!ctx->saw_finish) {
-            ESP_LOGE("HTTP", "Disconnected before finish → error");
-            return ESP_FAIL;
-        }
-        break;
-
-    default:
-        break;
-    }
-
-    return ESP_OK;
-}
 
 // assume this is allocated globally or in your OTA state struct
 
@@ -298,25 +115,20 @@ static esp_err_t fetch_ota_manifest(const char *manifest_url,manifest_t* manifes
 
     memset(&ota_service_state.manifest, 0, sizeof(ota_service_state.manifest));
     memset(ota_service_state.response_buffer, 0, sizeof(ota_service_state.response_buffer));
-    ota_service_state.data_len=0;
 
     // set new url for this request
     esp_http_client_set_url(client, manifest_url);
     ESP_LOGI(TAG,"url %s",manifest_url);
-    //Although events are handled through event handler but it iis a blocking call
-    esp_err_t err = esp_http_client_perform(client);
-    
+    esp_err_t err = esp_http_client_open(client, 0);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "open failed: %s", esp_err_to_name(err));
         return err;
     }
 
-    //int content_len = esp_http_client_fetch_headers(client);
-    //ESP_LOGI(TAG, "Manifest content length = %d", content_len);
+    int content_len = esp_http_client_fetch_headers(client);
+    ESP_LOGI(TAG, "Manifest content length = %d", content_len);
 
-    //int total_read = 0;
-    
-    /*
+    int total_read = 0;
     while (1) {
         int bytes_read = esp_http_client_read(
             client,
@@ -341,7 +153,6 @@ static esp_err_t fetch_ota_manifest(const char *manifest_url,manifest_t* manifes
             }
         }
     }
-        */
 
         // After reading 1023 bytes, log the actual content
     ESP_LOGI(TAG, "First 200 chars:");
@@ -351,8 +162,8 @@ static esp_err_t fetch_ota_manifest(const char *manifest_url,manifest_t* manifes
     ESP_LOG_BUFFER_CHAR(TAG, ota_service_state.response_buffer + 823, 200);
 
     
-    ota_service_state.response_buffer[ota_service_state.data_len] = '\0';
-    ESP_LOGI(TAG, "Manifest received (%d bytes)", ota_service_state.data_len);
+    ota_service_state.response_buffer[total_read] = '\0';
+    ESP_LOGI(TAG, "Manifest received (%d bytes)", total_read);
 
     int status = esp_http_client_get_status_code(client);
     if (status != 200) {
@@ -519,29 +330,49 @@ static void ota_task(void *pvParameter)
 
         ESP_LOGI(TAG,"url %s",manifest->firmware_url);
         
-
         esp_http_client_set_url(client,manifest->firmware_url);
-        //esp_http_client_set_redirection(client);
-        //clear the buffer
-        memset(ota_service_state.response_buffer, 0, sizeof(ota_service_state.response_buffer));
-        //Setting these to inital value before next request
-        ota_service_state.expect_redirect=false;
-        ota_service_state.data_len=0;
-        
-        err = esp_http_client_perform(client);
+        esp_http_client_set_redirection(client);
+        err = esp_http_client_open(client, 0);
         //If unable to open connection then too skip an go back to waiting
         if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Failed firmware link: %s", esp_err_to_name(err));
+            ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
+            esp_http_client_close(client);
             continue;
             //task_fatal_error();
         }
-        
-        //The github firmware link redirects to  another link
+        int content_length=esp_http_client_fetch_headers(client);
 
-            // Now open the redirected URL
+        //Added below because of git redirection
+        int status_code = esp_http_client_get_status_code(client);
+    
+        ESP_LOGI(TAG, "HTTP Status: %d, Content-Length: %d", status_code, content_length);
         
-        //The response buffer contains the redirect url
-        //Now downloading firmware and big data handler will  be used
+        // Handle redirect responses - NOW call esp_http_client_set_redirection()
+        if (status_code == 302 || status_code == 301) {//If redirection
+            ESP_LOGI(TAG, "Got redirect response, following redirect...");
+            
+            esp_http_client_close(client);
+            
+            // CORRECT USAGE: Call set_redirection AFTER receiving 30x response
+            err = esp_http_client_set_redirection(client);
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to set redirection: %s", esp_err_to_name(err));
+                continue;
+            }
+            
+            // Now open the redirected URL
+            err = esp_http_client_open(client, 0);
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to open redirected connection: %s", esp_err_to_name(err));
+                esp_http_client_close(client);
+                continue;
+            }
+            
+            content_length = esp_http_client_fetch_headers(client);
+            status_code = esp_http_client_get_status_code(client);
+            ESP_LOGI(TAG, "After redirect - Status: %d, Content-Length: %d", status_code, content_length);
+        }
+        
         
         update_partition = esp_ota_get_next_update_partition(NULL);
         //assert(update_partition != NULL);
@@ -549,23 +380,103 @@ static void ota_task(void *pvParameter)
         if(update_partition == NULL){
             continue;
         }
-        ESP_LOGI(TAG,"url %.10s",ota_service_state.response_buffer);
-        esp_http_client_set_url(client,ota_service_state.response_buffer);
-        memset(ota_service_state.response_buffer, 0, sizeof(ota_service_state.response_buffer));
-        //Setting these to inital value before next request
-        ota_service_state.expect_redirect=false;
-        ota_service_state.data_len=0;
-        ota_service_state.ota_context.buffer=ota_service_state.response_buffer;
-        ota_service_state.ota_context.update_handle=&update_handle;
-        ota_service_state.ota_context.update_partition=update_partition;
-        err = esp_http_client_perform(client);
+
+
+        ESP_LOGI(TAG, "Writing to partition subtype %d at offset 0x%"PRIx32,
+                update_partition->subtype, update_partition->address);
+
+        int binary_file_length = 0;
+        /*deal with all receive packet*/
+        bool image_header_was_checked = false;
+        bool read_success=false;
+        while (1) {
+            int data_read = esp_http_client_read(client, ota_write_data, MAX_HTTP_RECV_BUFFER);
+            ESP_LOGI(TAG,"data read length %d",data_read);
+            if (data_read < 0) {
+                ESP_LOGE(TAG, "Error: SSL data read error");
+                read_success=false;
+                esp_http_client_close(client);
+                //Actually the policy is to continue but continue in this nested, so break and then continue
+                break;
+                //task_fatal_error();
+            } else if (data_read > 0) {
+                if (image_header_was_checked == false) {
+                    esp_app_desc_t new_app_info;
+                    if (data_read > sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t) + sizeof(esp_app_desc_t)){
+                        // check current version with downloading
+                        memcpy(&new_app_info, &ota_write_data[sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t)], sizeof(esp_app_desc_t));
+                        ESP_LOGI(TAG, "New firmware version: %s", new_app_info.version);
+
+                        esp_app_desc_t running_app_info;
+                        if (esp_ota_get_partition_description(running, &running_app_info) == ESP_OK) {
+                            ESP_LOGI(TAG, "Running firmware version: %s", running_app_info.version);
+                        }
+
+                        image_header_was_checked = true;
+
+                        err = esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES, &update_handle);
+                        if (err != ESP_OK) {
+                            ESP_LOGE(TAG, "esp_ota_begin failed (%s)", esp_err_to_name(err));
+                            read_success=false;
+                            esp_http_client_close(client);
+                            //Actually the policy is to continue but continue in this nested, so break and then continue
+                            break;
+                            //task_fatal_error();
+                        }
+                        ESP_LOGI(TAG, "esp_ota_begin succeeded");
+                    } 
+					//The header must be read as a whole not chunks (needs improvement in future). So consider it fail if data_read<header size
+					else {
+                        ESP_LOGE(TAG, "received package is not fit len");
+                        read_success=false;
+                        esp_http_client_close(client);
+						break;
+                    }
+                }
+				
+				//If the break statement didnt run it means data read > header size so write as ota
+                err = esp_ota_write( update_handle, (const void *)ota_write_data, data_read);
+                if (err != ESP_OK) {
+                    read_success=false;
+                    esp_http_client_close(client);
+                    esp_ota_abort(update_handle);
+					break;
+                }
+                binary_file_length += data_read;
+                ESP_LOGD(TAG, "Written image length %d", binary_file_length);
+            } else if (data_read == 0) {
+            /*
+                * As esp_http_client_read never returns negative error code, we rely on
+                * `errno` to check for underlying transport connectivity closure if any
+                */
+                if (errno == ECONNRESET || errno == ENOTCONN) {
+                    read_success=false;
+                    ESP_LOGE(TAG, "Connection closed, errno = %d", errno);
+                    break;
+                }
+                if (esp_http_client_is_complete_data_received(client) == true) {
+                    read_success=true;
+                    ESP_LOGI(TAG, "Connection closed");
+                    break;
+                }
+            }
+        }
+
+        //If there was read_success=failure in the while loop and thus break statement which meant skip so continue
+        if(read_success==false){
+            continue;
+        }
         
+            ESP_LOGI(TAG, "Total Write binary data length: %d", binary_file_length);
+        if (esp_http_client_is_complete_data_received(client) != true) {
+            ESP_LOGE(TAG, "Error in receiving complete file");
         
-        
-        ESP_LOGI(TAG, "Total Write binary data length: %d", ota_service_state.ota_context.length);
-        if (ota_service_state.ota_context.ota_finished != true) {
-             continue;
-         }
+            esp_http_client_close(client);
+            esp_ota_abort(update_handle);
+            continue;
+            //break;
+            //task_fatal_error();
+        }
 
         err = esp_ota_end(update_handle);
         if (err != ESP_OK) {
@@ -574,7 +485,9 @@ static void ota_task(void *pvParameter)
             } else {
                 ESP_LOGE(TAG, "esp_ota_end failed (%s)!", esp_err_to_name(err));
             }
-         
+            esp_http_client_close(client);
+            //http_cleanup(client);
+            //task_fatal_error();
             continue;
         }
 
@@ -631,15 +544,9 @@ esp_http_client_config_t config={0};
     config.keep_alive_enable = true;
     config.buffer_size = 8192;    // Explicity supplied large value instead of not setting it and thus using default size, because github is sending a big header in responce which contains redirect url
     config.buffer_size_tx = 512;  // request side can stay small
-    config.disable_auto_redirect=true;
-    config.event_handler=_http_event_handler;
-    config.user_data=&ota_service_state;
-    config.buffer_size = 2048;           // body buffer
-    config.buffer_size_tx = 2048;        // optional, for sending
-    
-    
+    config.disable_auto_redirect=false;
 
-    
+
     esp_http_client_handle_t* client = &ota_service_state.client;
     *client = esp_http_client_init(&config);
     if (*client == NULL) {
@@ -647,7 +554,7 @@ esp_http_client_config_t config={0};
         return ERR_OTA_SERVICE_INIT_FAIL;
     }
  
-    ota_service_state.big_data_handler=big_data_handler;
+
      ota_service_state.start_update=xSemaphoreCreateBinary();
 
     if(ota_service_state.start_update==NULL)
@@ -692,7 +599,6 @@ esp_http_client_config_t config={0};
     esp_partition_get_sha256(esp_ota_get_running_partition(), sha_256);
     print_sha256(sha_256, "SHA-256 for current firmware: ");
     */
-   
     const esp_partition_t *running = esp_ota_get_running_partition();
     esp_ota_img_states_t ota_state;
     if (esp_ota_get_state_partition(running, &ota_state) == ESP_OK) {
