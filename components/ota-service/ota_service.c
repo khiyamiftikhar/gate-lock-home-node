@@ -52,6 +52,9 @@ static struct{
     esp_http_client_handle_t client;
     char response_buffer[MAX_HTTP_RECV_BUFFER];
     manifest_t manifest;
+    int data_len;
+    bool expect_redirect;
+    TaskHandle_t ota_task_handle;
     //TimerHandle_t timer;
     
 }ota_service_state={0};
@@ -101,7 +104,48 @@ static void infinite_loop(void)
 
 
 
+///
 
+/// @brief Only purpose of this event handler is to read the redirect header. 
+/// All other events are handles synchronously in the ota_task
+/// @param evt 
+/// @return 
+static esp_err_t _http_event_handler(esp_http_client_event_t *evt) {
+    
+    //Since ota_service_state is a static struct so there is not type for it
+    //The state can be accessed globally, but instead using it this way will make this handler resuable
+    typeof(ota_service_state)* ctx= (typeof(ota_service_state)*) evt->user_data;
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    //ESP_LOGI(TAG, "ctx ptr=%p expect_redirect=%d", ctx, ctx ? ctx->expect_redirect : -1);
+    switch (evt->event_id) {
+
+    case HTTP_EVENT_ON_HEADER:
+        if (strcasecmp(evt->header_key, "Location") == 0) {
+            // Copy redirect URL (full header value is available)
+            ESP_LOGI(TAG,"location");
+            //ESP_LOGI(TAG, "Header: %s = %s", evt->header_key, evt->header_value);
+            strncpy(ctx->response_buffer, evt->header_value, MAX_HTTP_RECV_BUFFER - 1);
+            ctx->response_buffer[MAX_HTTP_RECV_BUFFER - 1] = '\0';
+            ctx->data_len = strlen(ctx->response_buffer);
+            ctx->expect_redirect=true;
+            ESP_LOGI(TAG,"leaving location");
+            //Notify the waiting taask
+            
+            //BaseType_t notify_result;
+            
+            
+            //notify_result = xTaskNotifyFromISR(ctx->ota_task_handle, 0,eSetValueWithOverwrite,&xHigherPriorityTaskWoken);
+    
+        }
+        break;
+
+    
+    default:
+        break;
+    }
+
+    return ESP_OK;
+}
 
 
 // assume this is allocated globally or in your OTA state struct
@@ -276,6 +320,8 @@ static void ota_task(void *pvParameter)
     char* manifest_url=MANIFEST_URL;
     ESP_LOGI(TAG, "Starting OTA example task");
 
+    ota_service_state.ota_task_handle=xTaskGetCurrentTaskHandle();
+
     const esp_partition_t *configured = esp_ota_get_boot_partition();
     const esp_partition_t *running = esp_ota_get_running_partition();
 
@@ -331,8 +377,8 @@ static void ota_task(void *pvParameter)
         ESP_LOGI(TAG,"url %s",manifest->firmware_url);
         
         esp_http_client_set_url(client,manifest->firmware_url);
-        esp_http_client_set_redirection(client);
-        err = esp_http_client_open(client, 0);
+        //This one is perform, beacuse open is not working in blocking way with event handler
+        err = esp_http_client_perform(client);
         //If unable to open connection then too skip an go back to waiting
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to open HTTP connection: %s", esp_err_to_name(err));
@@ -340,36 +386,83 @@ static void ota_task(void *pvParameter)
             continue;
             //task_fatal_error();
         }
-        int content_length=esp_http_client_fetch_headers(client);
-
+     
+        //Wait For notification from the event handler before proceeding. so that redirect url is captured
+        ESP_LOGI(TAG,"waiting for notification");
+        //xTaskNotifyWait(0, 0, NULL, portMAX_DELAY);
+        ESP_LOGI(TAG,"wait over");
+        esp_http_client_close(client);
+        /*
         //Added below because of git redirection
-        int status_code = esp_http_client_get_status_code(client);
-    
-        ESP_LOGI(TAG, "HTTP Status: %d, Content-Length: %d", status_code, content_length);
+        //When get status was called after fetch header, the get header later was not giving anythin
+        //Seems internally buffer was replaced by some new value. so now fetch header is called later
+        int content_length=esp_http_client_fetch_headers(client);
+        int status_code;
+        status_code= esp_http_client_get_status_code(client);
         
-        // Handle redirect responses - NOW call esp_http_client_set_redirection()
-        if (status_code == 302 || status_code == 301) {//If redirection
-            ESP_LOGI(TAG, "Got redirect response, following redirect...");
+    
+        
+        ESP_LOGI(TAG, "firmware HTTP Status: %d, Content-Length: %d", status_code, content_length);
+        */
+        //Handle redirect responses - NOW call esp_http_client_set_redirection()
+        
+        
+
+        if (ota_service_state.expect_redirect==true){
             
-            esp_http_client_close(client);
+            
+            ESP_LOGI(TAG, "Got redirect response, following redirect...");
+            //content_length=esp_http_client_fetch_headers(client);
+
+            
+            
             
             // CORRECT USAGE: Call set_redirection AFTER receiving 30x response
-            err = esp_http_client_set_redirection(client);
+            
+            
+            //char *location = NULL;      //redirect url
+            //err = esp_http_client_get_header(client, "Location", &location);
+
+            /*
             if (err != ESP_OK) {
-                ESP_LOGE(TAG, "Failed to set redirection: %s", esp_err_to_name(err));
+                ESP_LOGI(TAG, "Failed to set redirection: %s", esp_err_to_name(err));
                 continue;
             }
+            else if(location==NULL){
+                ESP_LOGI(TAG, "Failed to get redirection URL");
+                continue;
+            }
+
             
+            size_t loc_len = strnlen(location, 1024);  // sanity limit, in case no '\0'
+            size_t copy_len = MIN(loc_len, sizeof(ota_service_state.response_buffer) - 1);
+            memcpy(ota_service_state.response_buffer, location, copy_len);
+            ota_service_state.response_buffer[copy_len] = '\0';  //ensure termination
+            //ESP_LOGI(TAG, "Redirect URL: %s", ota_service_state.response_buffer);
+            */
+            esp_http_client_close(client);//close from current
+
+            //The response buffer contains the redirect url
+            esp_http_client_set_url(client,ota_service_state.response_buffer); 
+
+            ESP_LOGI(TAG,"url final %s",ota_service_state.response_buffer);
+            
+
+
             // Now open the redirected URL
             err = esp_http_client_open(client, 0);
+            //Clear it because ota firmware will be copied in it
+            memset(ota_service_state.response_buffer, 0, sizeof(ota_service_state.response_buffer));
+
             if (err != ESP_OK) {
                 ESP_LOGE(TAG, "Failed to open redirected connection: %s", esp_err_to_name(err));
                 esp_http_client_close(client);
                 continue;
             }
             
-            content_length = esp_http_client_fetch_headers(client);
-            status_code = esp_http_client_get_status_code(client);
+            int status_code = esp_http_client_get_status_code(client);
+            int content_length = esp_http_client_fetch_headers(client);
+            ESP_LOGI(TAG, "why not coming");
             ESP_LOGI(TAG, "After redirect - Status: %d, Content-Length: %d", status_code, content_length);
         }
         
@@ -389,9 +482,10 @@ static void ota_task(void *pvParameter)
         /*deal with all receive packet*/
         bool image_header_was_checked = false;
         bool read_success=false;
+        uint8_t attempts=0;     // a workaround to read the chunked data from the firmware url. forst 0 read length will be ignored
         while (1) {
             int data_read = esp_http_client_read(client, ota_write_data, MAX_HTTP_RECV_BUFFER);
-            ESP_LOGI(TAG,"data read length %d",data_read);
+            //ESP_LOGI(TAG,"data read length %d",data_read);
             if (data_read < 0) {
                 ESP_LOGE(TAG, "Error: SSL data read error");
                 read_success=false;
@@ -449,6 +543,11 @@ static void ota_task(void *pvParameter)
                 * As esp_http_client_read never returns negative error code, we rely on
                 * `errno` to check for underlying transport connectivity closure if any
                 */
+                if(attempts==0){     //A workaround to ignore the first 0 read incase of chunked data which is the case for firmware
+                    attempts++;
+                    continue;
+                }
+
                 if (errno == ECONNRESET || errno == ENOTCONN) {
                     read_success=false;
                     ESP_LOGE(TAG, "Connection closed, errno = %d", errno);
@@ -456,10 +555,13 @@ static void ota_task(void *pvParameter)
                 }
                 if (esp_http_client_is_complete_data_received(client) == true) {
                     read_success=true;
-                    ESP_LOGI(TAG, "Connection closed");
+                    ESP_LOGI(TAG, "Connection closed bcz completed");
                     break;
                 }
             }
+
+            
+            
         }
 
         //If there was read_success=failure in the while loop and thus break statement which meant skip so continue
@@ -542,9 +644,11 @@ esp_http_client_config_t config={0};
     config.cert_pem = (char *)server_cert_pem_start;
     config.timeout_ms = OTA_RECV_TIMEOUT;
     config.keep_alive_enable = true;
-    config.buffer_size = 8192;    // Explicity supplied large value instead of not setting it and thus using default size, because github is sending a big header in responce which contains redirect url
-    config.buffer_size_tx = 512;  // request side can stay small
-    config.disable_auto_redirect=false;
+    config.buffer_size = 2048;    // Explicity supplied large value instead of not setting it and thus using default size, because github is sending a big header in responce which contains redirect url
+    config.buffer_size_tx = 2048;  // request side can stay small
+    config.disable_auto_redirect=true;
+    config.event_handler=_http_event_handler;
+    config.user_data=&ota_service_state;
 
 
     esp_http_client_handle_t* client = &ota_service_state.client;
