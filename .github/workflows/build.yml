@@ -3,7 +3,8 @@ on:
   push:
     branches:
       - main
-      - development/esp32c3-debug
+    tags:        # ← NEW: Trigger on version tags
+      - 'v*'
   pull_request:
     branches:
       - main
@@ -14,13 +15,49 @@ jobs:
     strategy:
       matrix:
         target: [esp32, esp32c3]
-
+   
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      # Cache ESP-IDF tools
-      - name: Cache ESP-IDF tools
+        
+      # ← NEW: Extract version from git tag or generate dev version
+      - name: Get Version from Tag
+        run: |
+          if git describe --exact-match --tags HEAD 2>/dev/null; then
+            VERSION=$(git describe --exact-match --tags HEAD)
+            BUILD_TYPE="release"
+            IS_RELEASE="true"
+          else
+            VERSION=$(git describe --tags --always --dirty)-dev
+            BUILD_TYPE="dev"
+            IS_RELEASE="false"
+          fi
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "BUILD_TYPE=${BUILD_TYPE}" >> $GITHUB_ENV
+          echo "IS_RELEASE=${IS_RELEASE}" >> $GITHUB_ENV
+          echo "🏷️ Building version: ${VERSION} (${BUILD_TYPE})"
+      
+      # Add this step after "Get Version from Tag" to test your logic
+      - name: Debug Version Logic
+        run: |
+          echo "🔍 Current branch: ${{ github.ref }}"
+          echo "🔍 Event type: ${{ github.event_name }}"
+          echo "🔍 Is tag push: $(echo '${{ github.ref }}' | grep -q '^refs/tags/' && echo 'YES' || echo 'NO')"
+          
+          # Test what would happen with a real tag
+          echo "📝 Simulating version scenarios:"
+          
+          echo "Current scenario (actual):"
+          echo "  VERSION: ${{ env.VERSION }}"
+          echo "  BUILD_TYPE: ${{ env.BUILD_TYPE }}" 
+          echo "  IS_RELEASE: ${{ env.IS_RELEASE }}"
+          
+          # Show what files are created
+          echo "📁 Generated artifacts:"
+          ls -la firmware_${{ matrix.target }}/flash_info.txt || echo "No flash_info.txt found"
+                
+      # Cache ESP-IDF installation
+      - name: Cache ESP-IDF
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/esp-idf
@@ -57,17 +94,355 @@ jobs:
           cp build_${{ matrix.target }}/flash_args firmware_${{ matrix.target }}/ 2>/dev/null || echo "flash_args not found, skipping"
           cp build_${{ matrix.target }}/flasher_args.json firmware_${{ matrix.target }}/ 2>/dev/null || echo "flasher_args.json not found, skipping"
           cp build_${{ matrix.target }}/project_description.json firmware_${{ matrix.target }}/ 2>/dev/null || echo "project_description.json not found, skipping"
+          
+          # ← ENHANCED: Add version info to flash_info.txt
           cat > firmware_${{ matrix.target }}/flash_info.txt << EOF
+          version=${{ env.VERSION }}
+          build_type=${{ env.BUILD_TYPE }}
           target=${{ matrix.target }}
           idf_version=v5.4.2
           build_time=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
           commit_sha=${{ github.sha }}
           workflow_run=${{ github.run_number }}
           EOF
-
-      - name: Upload firmware artifacts
+        
+        # Upload firmware artifacts (regular workflow)
+      - name: Upload firmware for usb flashing
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.target }}-firmware
+          name: ${{ matrix.target }}-firmware-${{ env.VERSION }}
           path: firmware_${{ matrix.target }}/
           retention-days: 7
+          
+      # In your BUILD JOB, replace these steps:
+
+      # ← FIXED: Create OTA-ready firmware file (for releases only)
+      - name: Create OTA firmware file
+        if: startsWith(github.ref, 'refs/tags/')  # ← Changed condition
+        run: |
+          # Copy main firmware binary with version in filename
+          cp build_${{ matrix.target }}/$(ls build_${{ matrix.target }}/ | grep "\.bin$" | grep -v bootloader | grep -v partition-table | head -1) \
+             firmware-ota-${{ matrix.target }}-${{ env.VERSION }}.bin
+          echo "📦 Created OTA file: firmware-ota-${{ matrix.target }}-${{ env.VERSION }}.bin"
+          ls -la firmware-ota-${{ matrix.target }}-${{ env.VERSION }}.bin
+
+      # ← FIXED: Create OTA manifest file
+      - name: Create OTA manifest
+        if: startsWith(github.ref, 'refs/tags/')  # ← Changed condition
+        run: |
+          cat > ota-manifest-${{ matrix.target }}.json << EOF
+          {
+            "version": "${{ env.VERSION }}",
+            "target": "${{ matrix.target }}",
+            "firmware_url": "https://github.com/${{ github.repository }}/releases/download/${{ env.VERSION }}/firmware-ota-${{ matrix.target }}-${{ env.VERSION }}.bin",
+            "firmware_size": $(stat -c%s firmware-ota-${{ matrix.target }}-${{ env.VERSION }}.bin),
+            "checksum": "$(sha256sum firmware-ota-${{ matrix.target }}-${{ env.VERSION }}.bin | cut -d' ' -f1)",
+            "release_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "changelog_url": "https://github.com/${{ github.repository }}/releases/tag/${{ env.VERSION }}"
+          }
+          EOF
+          echo "📋 Created manifest: ota-manifest-${{ matrix.target }}.json"
+          cat ota-manifest-${{ matrix.target }}.json
+         
+      # Upload firmware artifacts (regular workflow) - UNCHANGED
+      #- name: Archive firmware
+      #  uses: actions/upload-artifact@v4
+      #  with:
+      #    name: ${{ matrix.target }}-firmware-${{ env.VERSION }}
+      #    path: firmware_${{ matrix.target }}/
+      #    retention-days: 7
+
+      # ← FIXED: Upload OTA files as separate artifacts
+      - name: Archive OTA files
+        if: startsWith(github.ref, 'refs/tags/')  # ← Changed condition
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-ota-${{ env.VERSION }}
+          path: |
+            firmware-ota-${{ matrix.target }}-${{ env.VERSION }}.bin
+            ota-manifest-${{ matrix.target }}.json
+          retention-days: 30
+
+# In your CREATE-RELEASE JOB, replace with this:
+
+  create-release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')  # Only run for version tags
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+       
+      - name: Get Version
+        run: |
+          # Use the tag name directly from GitHub context
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION="${{ github.ref_name }}"
+            echo "Using tag from trigger: $VERSION"
+          else
+            # Fallback to git describe
+            VERSION=$(git describe --tags --always)
+            echo "Using git describe: $VERSION"
+          fi
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "Final version: $VERSION"
+         
+      - name: Generate Changelog
+        run: |
+          echo "🔍 Generating changelog for ${{ env.VERSION }}..."
+          
+          # Get previous tag for changelog (with error handling)
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          if [ -n "$PREV_TAG" ]; then
+            echo "📝 Changes since $PREV_TAG:" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            
+            # Get commits between tags (with fallback)
+            if git log --oneline --no-merges "$PREV_TAG..HEAD" > /tmp/commits 2>/dev/null && [ -s /tmp/commits ]; then
+              cat /tmp/commits >> CHANGELOG.md
+            else
+              echo "- Various improvements and fixes" >> CHANGELOG.md
+            fi
+          else
+            echo "📝 Initial Release" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "First tagged release of the firmware." >> CHANGELOG.md
+          fi
+          
+          # Add build info
+          echo "" >> CHANGELOG.md
+          echo "## Build Information" >> CHANGELOG.md
+          echo "- **Version**: ${{ env.VERSION }}" >> CHANGELOG.md
+          echo "- **Build Date**: $(date -u +%Y-%m-%d\ %H:%M:%S\ UTC)" >> CHANGELOG.md
+          echo "- **Commit**: $(git rev-parse --short HEAD)" >> CHANGELOG.md
+          echo "- **Targets**: ESP32, ESP32-C3" >> CHANGELOG.md
+          
+          # Show generated changelog
+          echo "📋 Generated CHANGELOG.md:"
+          cat CHANGELOG.md
+         
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+         
+      - name: Prepare release files
+        run: |
+          mkdir -p release_files
+          
+          # Debug: List what artifacts were downloaded
+          echo "🔍 Downloaded artifacts:"
+          ls -la artifacts/
+          find artifacts/ -type f -name "*.bin" -o -name "*.json" | head -20
+          
+          # Create complete firmware packages (ZIP files for testing)
+          for target in esp32 esp32c3; do
+            if [ -d "artifacts/${target}-firmware-${{ env.VERSION }}" ]; then
+              echo "📦 Processing ${target} firmware package..."
+              cd "artifacts/${target}-firmware-${{ env.VERSION }}"
+              zip -r "../../release_files/firmware-complete-${target}-${{ env.VERSION }}.zip" .
+              cd ../..
+              echo "✅ Created: firmware-complete-${target}-${{ env.VERSION }}.zip"
+            else
+              echo "⚠️ No firmware artifacts found for ${target}"
+            fi
+          done
+          
+          # Move OTA files and manifests (look in OTA-specific artifact directories)
+          echo "🔍 Looking for OTA files..."
+          for target in esp32 esp32c3; do
+            OTA_DIR="artifacts/${target}-ota-${{ env.VERSION }}"
+            if [ -d "$OTA_DIR" ]; then
+              echo "📋 Found OTA artifacts in $OTA_DIR"
+              find "$OTA_DIR" -name "firmware-ota-*.bin" -exec cp {} release_files/ \; 2>/dev/null || true
+              find "$OTA_DIR" -name "ota-manifest-*.json" -exec cp {} release_files/ \; 2>/dev/null || true
+            else
+              echo "⚠️ No OTA artifacts found for ${target}"
+            fi
+          done
+          
+          # Create latest manifest files (stable URLs) - only if originals exist
+          for target in esp32 esp32c3; do
+            if [ -f "release_files/ota-manifest-${target}.json" ]; then
+              cp "release_files/ota-manifest-${target}.json" "release_files/ota-manifest-${target}-latest.json"
+              echo "📋 Created: ota-manifest-${target}-latest.json"
+            else
+              echo "⚠️ No manifest found for ${target}, skipping -latest copy"
+            fi
+          done
+          
+          # Show what we actually have
+          echo "📁 Final release_files contents:"
+          ls -la release_files/ || echo "❌ release_files directory is empty!"
+          
+          # Create a basic file if nothing exists (to prevent the action from failing)
+          if [ -z "$(ls -A release_files/ 2>/dev/null)" ]; then
+            echo "⚠️ No files found, creating placeholder..."
+            echo "No firmware files were generated for this build." > release_files/README.txt
+          fi
+         
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: "${{ env.VERSION }}"
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: ${{ contains(env.VERSION, 'alpha') || contains(env.VERSION, 'beta') || contains(env.VERSION, 'test') }}
+          files: release_files/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy Professional OTA
+        run: |
+          # Setup git for gh-pages
+          git config --global user.name "OTA Deploy Bot"
+          git config --global user.email "actions@github.com"
+          
+          # Clone/setup gh-pages branch
+          if git ls-remote --heads origin gh-pages | grep -q gh-pages; then
+            git clone --single-branch --branch gh-pages https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git ota-deploy
+            cd ota-deploy
+          else
+            mkdir ota-deploy && cd ota-deploy
+            git init
+            git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+            git checkout -b gh-pages
+            echo "# ${{ github.event.repository.name }} - OTA Distribution" > README.md
+            echo "" >> README.md
+            echo "This repository hosts OTA update manifests for the ${{ github.event.repository.name }} firmware." >> README.md
+            echo "" >> README.md
+            echo "## Channels" >> README.md
+            echo "- **Stable**: \`/ota/ota-manifest-{target}.json\`" >> README.md
+            echo "- **Beta**: \`/ota/beta/ota-manifest-{target}.json\`" >> README.md
+            echo "- **Dev**: \`/ota/dev/ota-manifest-{target}.json\`" >> README.md
+            git add README.md
+            git commit -m "Initial OTA deployment setup"
+            git push -u origin gh-pages
+          fi
+          
+          # Create professional OTA directory structure
+          mkdir -p ota/{stable,beta,dev}
+          
+          # Determine deployment channel based on version
+          if [[ "${{ env.VERSION }}" == *"alpha"* || "${{ env.VERSION }}" == *"dev"* ]]; then
+            CHANNEL="dev"
+            echo "🔧 Deploying to DEV channel"
+          elif [[ "${{ env.VERSION }}" == *"beta"* || "${{ env.VERSION }}" == *"test"* ]]; then
+            CHANNEL="beta"
+            echo "🧪 Deploying to BETA channel"
+          else
+            CHANNEL="stable"
+            echo "🚀 Deploying to STABLE channel"
+          fi
+          
+          # Deploy manifests for each target
+          for target in esp32 esp32c3; do
+            if [ -f "../release_files/ota-manifest-${target}.json" ]; then
+              # Deploy to specific channel
+              cp "../release_files/ota-manifest-${target}.json" "ota/${CHANNEL}/ota-manifest-${target}.json"
+              echo "✅ Deployed ${target} manifest to ${CHANNEL} channel"
+              
+              # If stable release, also update main manifest
+              if [ "$CHANNEL" == "stable" ]; then
+                cp "../release_files/ota-manifest-${target}.json" "ota/ota-manifest-${target}.json"
+                echo "✅ Updated main ${target} manifest"
+              fi
+            else
+              echo "⚠️ No manifest found for ${target}"
+            fi
+          done
+          
+          # Create/update channel info file
+          cat > "ota/${CHANNEL}/channel-info.json" << EOF
+          {
+            "channel": "${CHANNEL}",
+            "latest_version": "${{ env.VERSION }}",
+            "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "targets": ["esp32", "esp32c3"],
+            "changelog_url": "https://github.com/${{ github.repository }}/releases/tag/${{ env.VERSION }}"
+          }
+          EOF
+          
+          # Create user-friendly index page
+          cat > ota/index.html << EOF
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>${{ github.event.repository.name }} - OTA Updates</title>
+              <style>
+                  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+                  .channel { background: #f6f8fa; border-radius: 8px; padding: 20px; margin: 20px 0; }
+                  .stable { border-left: 4px solid #28a745; }
+                  .beta { border-left: 4px solid #ffc107; }
+                  .dev { border-left: 4px solid #dc3545; }
+                  a { color: #0366d6; text-decoration: none; }
+                  a:hover { text-decoration: underline; }
+                  code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 14px; }
+              </style>
+          </head>
+          <body>
+              <h1>${{ github.event.repository.name }} - OTA Updates</h1>
+              <p><strong>Latest Release:</strong> ${{ env.VERSION }} (${CHANNEL})</p>
+              <p><strong>Updated:</strong> $(date -u)</p>
+              
+              <div class="channel stable">
+                  <h2>🚀 Stable Channel</h2>
+                  <p>Production-ready releases</p>
+                  <ul>
+                      <li>ESP32: <code>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/ota-manifest-esp32.json</code></li>
+                      <li>ESP32-C3: <code>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/ota-manifest-esp32c3.json</code></li>
+                  </ul>
+              </div>
+              
+              <div class="channel beta">
+                  <h2>🧪 Beta Channel</h2>
+                  <p>Testing releases (v*-beta, v*-test)</p>
+                  <ul>
+                      <li>ESP32: <code>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/beta/ota-manifest-esp32.json</code></li>
+                      <li>ESP32-C3: <code>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/beta/ota-manifest-esp32c3.json</code></li>
+                  </ul>
+              </div>
+              
+              <div class="channel dev">
+                  <h2>🔧 Dev Channel</h2>
+                  <p>Development releases (v*-alpha, v*-dev)</p>
+                  <ul>
+                      <li>ESP32: <code>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/dev/ota-manifest-esp32.json</code></li>
+                      <li>ESP32-C3: <code>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/dev/ota-manifest-esp32c3.json</code></li>
+                  </ul>
+              </div>
+              
+              <hr>
+              <p><small>
+                  <a href="https://github.com/${{ github.repository }}">View Repository</a> | 
+                  <a href="https://github.com/${{ github.repository }}/releases">View Releases</a>
+              </small></p>
+          </body>
+          </html>
+          EOF
+          
+          # Commit and deploy
+          touch .nojekyll
+          git add .
+          if ! git diff --staged --quiet; then
+            git commit -m "Deploy OTA ${{ env.VERSION }} to ${CHANNEL} channel"
+            git push origin gh-pages
+            
+            echo ""
+            echo "🎉 Professional OTA deployed successfully!"
+            echo "📱 Your ESP32 devices can now use these STATIC URLs:"
+            echo ""
+            echo "   Stable:  https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/ota-manifest-esp32.json"
+            echo "   Beta:    https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/beta/ota-manifest-esp32.json"  
+            echo "   Dev:     https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/dev/ota-manifest-esp32.json"
+            echo ""
+            echo "📊 Browse updates: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/"
+          else
+            echo "ℹ️ No changes to deploy"
+          fi
