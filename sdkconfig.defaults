@@ -1,6 +1,5 @@
 # Default sdkconfig parameters to use the OTA
 # partition table layout, with a 4MB flash size
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
-CONFIG_PARTITION_TABLE_TWO_OTA=y
 #Because was crashing on ota reboot saying "A stack overflow in task sys_evt has been detected"
 CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4096

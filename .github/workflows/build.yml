@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - development/esp32c3-debug
   pull_request:
     branches:
       - main

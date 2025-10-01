@@ -95,6 +95,8 @@ void init_espnow(){
 
 void app_main(void)
 {
+    
+    esp_log_level_set("ESP_NOW_TRANSPORT", ESP_LOG_NONE);
     esp_flash_init();
     //wifi_init();
     wifi_smartconfig_t wifi_cfg={.callback=init_espnow};
