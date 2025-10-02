@@ -371,7 +371,7 @@ static void ota_task(void *pvParameter)
         }
 
         //If the available version is not newer, then also continue
-        if(is_update_available(manifest->version)!=ESP_OK)
+        if(is_update_available(manifest->version))
             continue;
 
         ESP_LOGI(TAG,"url %s",manifest->firmware_url);
