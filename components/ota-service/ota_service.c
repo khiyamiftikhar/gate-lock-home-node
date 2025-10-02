@@ -245,11 +245,11 @@ static esp_err_t fetch_ota_manifest(const char *manifest_url,manifest_t* manifes
 }
 
 
-static esp_err_t is_update_available(char* new_version){
+static bool is_update_available(char* new_version){
 
     
     if (new_version==NULL || new_version[0] == '\0') {
-        return ESP_ERR_INVALID_ARG;
+        return false;
     }
     esp_err_t ret=0;
     const esp_partition_t *running = esp_ota_get_running_partition();
@@ -262,8 +262,8 @@ static esp_err_t is_update_available(char* new_version){
         //Since unable to read so assume , new firmware is updated, otherwise forever stuck in current version
         ESP_LOGE(TAG, "Failed to read running partition description");
         
-        ret=ESP_OK;
-        return ret;
+        
+        return false;
     }
 
     
@@ -371,7 +371,7 @@ static void ota_task(void *pvParameter)
         }
 
         //If the available version is not newer, then also continue
-        if(is_update_available(manifest->version)!=ESP_OK)
+        if(!is_update_available(manifest->version))
             continue;
 
         ESP_LOGI(TAG,"url %s",manifest->firmware_url);
