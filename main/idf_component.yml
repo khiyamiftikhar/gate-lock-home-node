@@ -13,3 +13,4 @@ dependencies:
     path: peer-registry
   wifi-smartconfig:
     git: https://github.com/khiyamiftikhar/wifi-smartconfig
+    version: fix/ota-reboot-resumption
