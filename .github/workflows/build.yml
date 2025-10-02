@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - fix/wifi-ota-reboot-crash
     tags:        # ← NEW: Trigger on version tags
       - 'v*'
   pull_request:
