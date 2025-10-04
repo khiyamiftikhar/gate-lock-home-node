@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - fix/enable-auto-rollback
     tags:        # ← NEW: Trigger on version tags
       - 'v*'
   pull_request:
