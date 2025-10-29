@@ -18,6 +18,8 @@
 #include "smartconfig.h"
 #include "server_adapter.h"
 #include "ota_service.h"
+#include "event_system_adapter.h"
+#include "mdns_service.h"
 
 #define     ESPNOW_CHANNEL          1
 #define     DISCOVERY_DURATION      15000    //ms
@@ -59,6 +61,7 @@ static void user_command_simulation(user_command_t command){
 }*/
 
 /* WiFi should start before using ESPNOW */
+/*
 static void wifi_init(void)
 {
     ESP_ERROR_CHECK(esp_netif_init());
@@ -76,7 +79,7 @@ static void wifi_init(void)
 #if ESPNOW_ENABLE_LONG_RANGE
     ESP_ERROR_CHECK( esp_wifi_set_protocol(ESP_IF_WIFI_STA, WIFI_PROTOCOL_11B|WIFI_PROTOCOL_11G|WIFI_PROTOCOL_11N|WIFI_PROTOCOL_LR) );
 #endif
-}
+}*/
 
 static void esp_flash_init(){
      esp_err_t ret = nvs_flash_init();
@@ -108,6 +111,7 @@ void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 
+    esp_err_t ret=mdns_init_service();    
     esp_err_t ota_err=ota_service_init();
     uint8_t primary;
     wifi_second_chan_t second;
@@ -131,11 +135,6 @@ void app_main(void)
         ESP_LOGI(TAG,"peer registry init failed");
     
 
-    discovery_timer_implementation_t* timer_interface=timer_create(DISCOVERY_INTERVAL);
-
-    if(timer_interface==NULL){
-        ESP_LOGI(TAG,"timer init has failed");
-    }
 
     config_espnow_discovery discovery_config;
     //Must be an instance because config contains a pointer to it and 
@@ -150,7 +149,7 @@ void app_main(void)
 
     //Assign the discovery interface to the discovery member of discovery config
     discovery_config.discovery=&discovery_comm_interface;
-    discovery_config.timer=&timer_interface->methods;
+    
     //The white list interface member assigned to the peer registry appropriate method
     discovery_whitelist_interface_t white_list;
     white_list.is_white_listed=peer_registry->peer_registry_exists_by_mac;
@@ -158,7 +157,7 @@ void app_main(void)
     discovery_config.discovery_duration=DISCOVERY_DURATION;
     discovery_config.discovery_interval=DISCOVERY_INTERVAL;
     
-    discovery_service_interface_t* discovery_handlers=discovery_service_init(&discovery_config);
+    ret=discovery_service_init(&discovery_config);
 
     //Now since discovery interface is created and it returned the handlers. now thoose handlers will be assigned to callbacks
 
@@ -167,10 +166,7 @@ void app_main(void)
     as interface member wont work as the returned interface pointer is a copy of the original
     */
 
-    espnow_transport->callbacks.on_device_discovered=discovery_handlers->comm_callback_handler.process_discovery_callback;
-    espnow_transport->callbacks.on_discovery_ack=discovery_handlers->comm_callback_handler.process_discovery_acknowledgement_callback;
     
-    timer_interface->callback_handler=discovery_handlers->timer_callback_handler.timer_handler;
     
 
 
@@ -206,21 +202,20 @@ void app_main(void)
 
     user_interaction_config_t interaction_config={ .gate_close_endpoint="/close-gate",
                                                     .gate_open_endpoint="/open-gate",
-                                                    //.handler=home_node->user_command_callback_handler
+                                                  
                                                 };
-    user_interaction_interface_t* user_interface=user_interaction_create(&interaction_config);
+    ret=user_interaction_create(&interaction_config);
     home_config.gate_node_id=&gate_node_id;
     home_config.msg_interface=&msg_interface;
-    home_config.user_output=&user_interface->user_output;
-
-    home_node_service_interface* home_node= home_node_service_create(&home_config);
-    
-    user_interface->register_user_command_callback(home_node->user_command_callback_handler);
-    
     
 
-    espnow_transport->callbacks.on_data_received=home_node->msg_received_handler;
-    espnow_transport->callbacks.on_send_done=home_node->msg_sent_handler;
+    ret= home_node_service_create(&home_config);
+    
+    
+    
+    
+
+    
     ESP_LOGI(TAG,"before register");
     //user_input->register_callback(home_node->user_command_callback_handler);
     ESP_LOGI(TAG,"after register");

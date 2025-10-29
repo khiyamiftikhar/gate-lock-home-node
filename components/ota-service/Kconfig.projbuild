@@ -3,7 +3,7 @@ menu "OTA SERVICE"
     config FIRMWARE_URL
         string "Firmware manifest URL"
 
-        default "https://khiyamiftikhar.github.io/gate-lock-home-node/ota/beta/ota-manifest-esp32.json"        if IDF_TARGET_ESP32
+        default "https://khiyamiftikhar.github.io/gate-lock-home-node/ota/ota-manifest-esp32.json"        if IDF_TARGET_ESP32
         default "https://khiyamiftikhar.github.io/gate-lock-home-node/ota/ota-manifest-esp32c3.json"      if IDF_TARGET_ESP32C3
         #default "https://khiyamiftikhar.github.io/gate-lock-home-node/ota/beta/ota-manifest-esp32s3.json" if IDF_TARGET_ESP32S3
         #default "https://khiyamiftikhar.github.io/gate-lock-home-node/ota/beta/ota-manifest-esp32s2.json" if IDF_TARGET_ESP32S2

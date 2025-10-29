@@ -1,0 +1,1 @@
+echo | openssl s_client -servername khiyamiftikhar.github.io -connect khiyamiftikhar.github.io:443 -showcerts > github_certs.txt

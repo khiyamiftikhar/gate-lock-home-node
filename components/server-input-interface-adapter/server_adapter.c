@@ -10,13 +10,14 @@
 
 #define     QUEUE_SIZE          10
 
+DEFINE_EVENT_ADAPTER(SERVER_ADAPTER);
+
 static const char* TAG="user interaction";
 
 static struct{
 
-    user_interaction_interface_t adapter_interface; //It provides it
+    
     relay_server_interface_t* server_interface;    //Required by it
-    user_command_callback command_handler;      //Required by it
     QueueHandle_t response_queue;
 
 
@@ -28,7 +29,7 @@ static esp_err_t inform_lock_status(lock_status_t status){
     return ESP_OK;
 }
     //When command is succesfully sent
-static esp_err_t inform_command_status(bool success){  
+esp_err_t user_interaction_inform_command_status(bool success){  
     ESP_LOGI(TAG,"push to queue %d",success);
     xQueueSend(user_interaction.response_queue,&success,portMAX_DELAY);
     return ESP_OK;
@@ -53,7 +54,7 @@ static void gate_close_request_handler(http_request_t* request,const char* uri){
     
     //Now send new command. The data that will arrive in queue now belongs to this request
     esp_err_t err=0;
-    err=user_interaction.command_handler(USER_COMMAND_LOCK_CLOSE);
+    SERVER_ADAPTER_post_event(SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_CLOSE,NULL,0);
     
     
     get_from_queue(portMAX_DELAY,&success);      //blocking call untill the espnow send callback pushes to queue
@@ -81,7 +82,7 @@ static void gate_open_request_handler(http_request_t* request,const char* uri){
     
     //Now send new command. The data that will arrive in queue now belongs to this request
     esp_err_t err=0;
-    err=user_interaction.command_handler(USER_COMMAND_LOCK_OPEN);
+    SERVER_ADAPTER_post_event(SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_OPEN,NULL,0);
     
     
     get_from_queue(portMAX_DELAY,&success);      //blocking call untill the espnow send callback pushes to queue
@@ -99,21 +100,15 @@ static void gate_open_request_handler(http_request_t* request,const char* uri){
 }
 
 
-static esp_err_t register_user_command_callback(user_command_callback cb){
-    if(cb==NULL)
-        return ESP_ERR_INVALID_ARG;
-    user_interaction.command_handler=cb;
-    return ESP_OK;
-}
 
-
-
-user_interaction_interface_t* user_interaction_create(user_interaction_config_t* config){
+esp_err_t user_interaction_create(user_interaction_config_t* config){
+    
+    
     if(config==NULL || config->gate_close_endpoint==NULL || config->gate_close_endpoint==NULL){
-        return NULL;
+        return ESP_FAIL;
     }
 
-    user_interaction.command_handler=config->handler;
+    
     relay_server_config_t server_config;
     server_config.max_connections=6;
     server_config.max_uris=3;
@@ -122,22 +117,25 @@ user_interaction_interface_t* user_interaction_create(user_interaction_config_t*
     user_interaction.server_interface=relay_server_init(&server_config);
 
     if(user_interaction.server_interface==NULL)
-        return NULL;
+        return ESP_FAIL;
     user_interaction.server_interface->register_uri(config->gate_close_endpoint,METHOD_GET,gate_close_request_handler);
     user_interaction.server_interface->register_uri(config->gate_open_endpoint,METHOD_GET,gate_open_request_handler);
-    user_interaction.adapter_interface.user_output.inform_command_status=inform_command_status;
-    user_interaction.adapter_interface.user_output.inform_lock_status=inform_lock_status;
-    user_interaction.adapter_interface.register_user_command_callback=register_user_command_callback;
 
 
     //The response of esp send will be pushed to this queue by the method of output interface
     user_interaction.response_queue=xQueueCreate(QUEUE_SIZE,sizeof(bool));
 
+    SERVER_ADAPTER_register_event(SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_OPEN,NULL);
+    SERVER_ADAPTER_register_event(SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_CLOSE,NULL);
+    SERVER_ADAPTER_register_event(SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_STATUS,NULL);
+
+     
+
 
     ESP_ERROR_CHECK(user_interaction.response_queue==NULL);
 
    // user_interaction.server_interface->register_uri(config->gate_open_endpoint,METHOD_GET,gate_close_request_handler);
-    return &user_interaction.adapter_interface;
+    return ESP_OK;
 
 }
 

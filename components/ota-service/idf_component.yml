@@ -1,0 +1,3 @@
+dependencies:
+  event-adapter:
+    git: https://github.com/khiyamiftikhar/event-adapter

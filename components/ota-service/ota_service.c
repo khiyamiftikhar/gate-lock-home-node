@@ -35,6 +35,8 @@
 static const char *TAG = "native_ota_example";
 /*an ota data write buffer ready to write to the flash*/
 
+DEFINE_EVENT_ADAPTER(OTA_SERVICE);
+
 typedef struct {
         char version[64];
         char firmware_url[512];
