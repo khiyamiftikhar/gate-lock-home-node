@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+      - development/use-new-event-adapter
     tags:        # ← NEW: Trigger on version tags
       - 'v*'
   pull_request:
