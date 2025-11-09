@@ -1,3 +1,5 @@
+#include "freertos/FreeRTOS.h"
+#include "freertos/Semphr.h"
 #include <stdio.h>
 #include <string.h>
 #include <esp_log.h>
@@ -14,6 +16,17 @@ typedef struct {
 } relay_uri_record_t;
 
 
+// Static pool
+#define MAX_ASYNC_REQUESTS 4
+
+typedef struct {
+    httpd_req_t *req;   // pointer to async request
+    bool in_use;
+} async_slot_t;
+
+// Global pool
+static async_slot_t async_pool[MAX_ASYNC_REQUESTS];
+
 
 //This is to encapsulate the httpd_req_t type so that esp_http_server is in PRIV_REQUIRES
 //struct http_request {
@@ -25,6 +38,7 @@ static struct{
     relay_server_interface_t interface;
     //request_callback cb;
     relay_uri_record_t uri_record[MAX_URIS];
+    SemaphoreHandle_t pool_mutex;
     int uri_count;
 }relay_server={0};
   
@@ -43,6 +57,36 @@ static const char *TAG = "HTTP Server";
             goto goto_tag;                                                             \
         }                                                                              \
     } while (0)
+
+
+static async_slot_t* async_slot_allocate(httpd_req_t *req)
+{
+    xSemaphoreTake(relay_server.pool_mutex, portMAX_DELAY);
+    async_slot_t *slot = NULL;
+    for (int i = 0; i < MAX_ASYNC_REQUESTS; i++) {
+        if (!async_pool[i].in_use) {
+            async_pool[i].req = req;
+            async_pool[i].in_use = true;
+            slot = &async_pool[i];
+            break;
+        }
+    }
+    xSemaphoreGive(relay_server.pool_mutex);
+    return slot;  // NULL if no free slot
+}
+
+static void async_slot_free(httpd_req_t *req)
+{
+    xSemaphoreTake(relay_server.pool_mutex, portMAX_DELAY);
+    for (int i = 0; i < MAX_ASYNC_REQUESTS; i++) {
+        if (async_pool[i].in_use && async_pool[i].req == req) {
+            async_pool[i].req = NULL;
+            async_pool[i].in_use = false;
+            break;
+        }
+    }
+    xSemaphoreGive(relay_server.pool_mutex);
+}
 
 
 static esp_err_t relay_server_send_response(http_request_t* req, 
@@ -203,9 +247,21 @@ static esp_err_t relay_server_send_status_error(httpd_req_t* req,
     return httpd_resp_send(req, msg, strlen(msg));
 }
 
+esp_err_t relay_server_close_async_connection(http_request_t *req){
+
+    httpd_req_t* request=(httpd_req_t*)req;
+
+    return httpd_req_async_handler_complete(request);
+}
+
 
 static esp_err_t master_request_handler(httpd_req_t *req){
     // Extract server context from ESP-IDF user_ctx
+   
+    httpd_req_t *async_req;
+
+    
+
     
     // Linear search through registered URIs
     for (size_t i = 0; i < relay_server.uri_count; i++) {
@@ -213,7 +269,12 @@ static esp_err_t master_request_handler(httpd_req_t *req){
 
             ESP_LOGI(TAG,"record i %d, uri %s",i,req->uri);
             // Found matching URI, call user callback
-            relay_server.uri_record[i].callback((http_request_t*)req, req->uri);
+            httpd_req_async_handler_begin(req, &async_req);
+            async_slot_t* async_slot = async_slot_allocate(req)
+            if(async_slot==NULL)
+                
+
+            relay_server.uri_record[i].callback((http_request_t*)async_req, async_req->uri);
             return ESP_OK;
         }
     }
@@ -266,6 +327,7 @@ relay_server_interface_t* relay_server_init(relay_server_config_t* config){
     relay_server.interface.register_uri=relay_server_register_uri;
     relay_server.interface.send_response=relay_server_send_response;
     relay_server.interface.send_error_response=relay_server_send_error;
+    relay_server.interface.close_async_connection=relay_server_close_async_connection;
 
     ESP_LOGI(TAG, "Starting HTTP Server");
     if( httpd_start(&relay_server.server_handle, &http_config) != ESP_OK){
@@ -273,6 +335,12 @@ relay_server_interface_t* relay_server_init(relay_server_config_t* config){
     
         ESP_LOGI(TAG,"Server Init Failed");
         return NULL;
+    }
+
+    relay_server.pool_mutex = xSemaphoreCreateMutex();
+    for (int i = 0; i < MAX_ASYNC_REQUESTS; i++) {
+        async_pool[i].req = NULL;
+        async_pool[i].in_use = false;
     }
 
     return &relay_server.interface;
