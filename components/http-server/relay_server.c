@@ -68,10 +68,13 @@ static async_slot_t* async_slot_allocate(httpd_req_t *req)
             async_pool[i].req = req;
             async_pool[i].in_use = true;
             slot = &async_pool[i];
+            ESP_LOGI(TAG, "Allocated slot %d for req %p", i, req);
             break;
         }
     }
     xSemaphoreGive(relay_server.pool_mutex);
+
+    
     return slot;  // NULL if no free slot
 }
 
@@ -82,6 +85,7 @@ static void async_slot_free(httpd_req_t *req)
         if (async_pool[i].in_use && async_pool[i].req == req) {
             async_pool[i].req = NULL;
             async_pool[i].in_use = false;
+            ESP_LOGI(TAG, "Freed slot %d for req %p", i, req);
             break;
         }
     }
@@ -95,7 +99,9 @@ static esp_err_t relay_server_send_response(http_request_t* req,
         return ESP_ERR_INVALID_ARG;
     }
     
-    httpd_req_t* request=(httpd_req_t*)req;
+    async_slot_t* asyn_request=(async_slot_t*)req;
+
+    httpd_req_t* request=asyn_request->req;
     // Set default headers
     esp_err_t ret = httpd_resp_set_type(request, "text/plain");
     if (ret != ESP_OK) {
@@ -103,6 +109,7 @@ static esp_err_t relay_server_send_response(http_request_t* req,
     }
     
     ret = httpd_resp_set_hdr(request, "Cache-Control", "no-cache");
+    httpd_resp_set_hdr(request, "Connection", "close");
     if (ret != ESP_OK) {
         return ret;
     }
@@ -249,9 +256,20 @@ static esp_err_t relay_server_send_status_error(httpd_req_t* req,
 
 esp_err_t relay_server_close_async_connection(http_request_t *req){
 
-    httpd_req_t* request=(httpd_req_t*)req;
+    esp_err_t ret=0;
+    async_slot_t* asyn_request=(async_slot_t*)req;
 
-    return httpd_req_async_handler_complete(request);
+    httpd_req_t* request=asyn_request->req;
+    
+
+    ESP_LOGI(TAG, "Completing async request: %p", asyn_request);
+    esp_err_t res = httpd_req_async_handler_complete(request);
+    ESP_LOGI(TAG, "Complete result: %s", esp_err_to_name(res));
+
+
+    async_slot_free(asyn_request->req);
+    return ret;
+
 }
 
 
@@ -261,7 +279,7 @@ static esp_err_t master_request_handler(httpd_req_t *req){
     httpd_req_t *async_req;
 
     
-
+    
     
     // Linear search through registered URIs
     for (size_t i = 0; i < relay_server.uri_count; i++) {
@@ -269,12 +287,21 @@ static esp_err_t master_request_handler(httpd_req_t *req){
 
             ESP_LOGI(TAG,"record i %d, uri %s",i,req->uri);
             // Found matching URI, call user callback
-            httpd_req_async_handler_begin(req, &async_req);
-            async_slot_t* async_slot = async_slot_allocate(req)
-            if(async_slot==NULL)
-                
 
-            relay_server.uri_record[i].callback((http_request_t*)async_req, async_req->uri);
+
+            httpd_req_async_handler_begin(req, &async_req);
+            async_slot_t* async_slot = async_slot_allocate(async_req);
+            if(async_slot==NULL){
+                relay_server_send_status_error(req,
+                                       503,
+                                       "Server Busy"); 
+                httpd_req_async_handler_complete(req);
+                return ESP_OK;
+            }
+            
+            
+
+            relay_server.uri_record[i].callback((http_request_t*)async_slot, async_req->uri);
             return ESP_OK;
         }
     }
