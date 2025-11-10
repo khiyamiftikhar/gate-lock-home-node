@@ -2,5 +2,5 @@ dependencies:
   message_service:
     git: https://github.com/khiyamiftikhar/espnow-components
     path: message_service
-    event-adapter:
+  event-adapter:
     git: https://github.com/khiyamiftikhar/event-adapter
