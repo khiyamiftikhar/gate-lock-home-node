@@ -7,10 +7,12 @@
 #include "espnow_discovery.h"
 #include "ota_service.h"
 #include "esp_now_transport.h"
-#include "home_node.h"
+#include "message_codec.h"
+
 #include "server_adapter.h"
 
 
+static const uint8_t gate_node_mac[]={0xe4,0x65,0xb8,0x1b,0x1c,0xd8};
 static const char* TAG="Routine";
 
 #define     MAX_WIFI_CHANNEL        13
@@ -32,23 +34,6 @@ static QueueHandle_t delegate_queue = NULL;
 static TaskHandle_t delegate_task_handle=NULL;
 
 
-
-static void delegated_to_task_restart_discovery_on_new_channel(void *arg, size_t len) {
-    if (len != sizeof(uint8_t)) return;
-    uint8_t channel = *(uint8_t *)arg;
-
-    ESP_LOGI(TAG, "new channel %d", channel);
-    esp_now_transport_deinit();
-
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    wifi_set_channel(channel);
-
-    esp_now_transport_config_t config = { .wifi_channel = channel };
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    esp_now_transport_init(&config);
-
-    start_discovery();
-}
 
 
 
@@ -135,28 +120,30 @@ static void routine_server_adapter_events_handler (void *handler_arg,
     switch(id){
 
         case SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_OPEN:
-                home_node_send_command(USER_COMMAND_LOCK_OPEN);
+                message_codec_send_command(gate_node_mac ,MESSAGE_COMMAND_OPEN_LOCK);
                 break;
 
 
         case SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_CLOSE:
-                home_node_send_command(USER_COMMAND_LOCK_OPEN);
+                message_codec_send_command(gate_node_mac,MESSAGE_COMMAND_CLOSE_LOCK);
                 break;
         case SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_STATUS:
-                home_node_send_command(USER_COMMAND_LOCK_STATUS);
+                message_codec_send_command(gate_node_mac,MESSAGE_COMMAND_LOCK_STATUS);
                 break;
 
         default:
             break;
 
-
-
     }
+
+    //Right now responds true unconditionally
+    user_interaction_inform_command_status(true,event_data);
 
 }
 
 
 
+/*
 static void routine_espnow_transport_events_handler (void *handler_arg,
                                     int32_t id,
                                     void *event_data){
@@ -166,7 +153,7 @@ static void routine_espnow_transport_events_handler (void *handler_arg,
 
         case ESPNOW_TRANSPORT_ROUTINE_EVENT_DISCOVERY_INCOMING:{
             uint8_t* src_mac=(uint8_t*)event_data;
-
+            ESP_LOGI(TAG,"discovery incoming");
             discovery_events_handler(DISCOVERY_EVENT_DISCOVERY_MESSAGE_ARRIVED,src_mac);
             break;
         }
@@ -188,12 +175,9 @@ static void routine_espnow_transport_events_handler (void *handler_arg,
         default:
             break;
 
-
-
-
     }
  }
-
+*/
 
 
 
@@ -222,9 +206,7 @@ void routine_event_handler (void *handler_arg,
             routine_ota_service_events_handler(handler_arg,id,event_data);
         }   
 
-        else if(base==ESPNOW_TRANSPORT_ROUTINE_EVENT_BASE)
-            routine_espnow_transport_events_handler(handler_arg,id,event_data);
-
+    
         
 
         

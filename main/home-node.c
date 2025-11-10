@@ -11,14 +11,16 @@
 #include "esp_mac.h"
 #include "esp_now_transport.h"
 #include "espnow_discovery.h"
+#include "database_interface.h"
 #include "discovery_timer.h"
 #include "peer_registry.h"
-#include "home_node.h"
-#include "user_output.h"
+#include "message_codec.h"
+//#include "user_output.h"
 #include "smartconfig.h"
 #include "server_adapter.h"
 #include "ota_service.h"
 #include "event_system_adapter.h"
+#include "routine_event_handler.h"
 #include "mdns_service.h"
 
 #define     ESPNOW_CHANNEL          1
@@ -27,7 +29,7 @@
 #define     ESPNOW_ENABLE_LONG_RANGE    1
 static const char* TAG="main gate";
 
-const uint8_t gate_node_mac[]={0xe4,0x65,0xb8,0x1b,0x1c,0xd8};
+static const uint8_t gate_node_mac[]={0xe4,0x65,0xb8,0x1b,0x1c,0xd8};
 
 static bool proceed=false;
 
@@ -99,37 +101,44 @@ void init_espnow(){
 void app_main(void)
 {
     
-    esp_log_level_set("ESP_NOW_TRANSPORT", ESP_LOG_NONE);
+    //esp_log_level_set("ESP_NOW_TRANSPORT", ESP_LOG_NONE);
     esp_flash_init();
+    event_system_adapter_init(routine_event_handler,NULL);
     //wifi_init();
     wifi_smartconfig_t wifi_cfg={.callback=init_espnow};
 
     initialise_wifi(&wifi_cfg);
     
     //Wait until wifi connection is established
-    while(proceed==false){
+        while(proceed==false){
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 
     esp_err_t ret=mdns_init_service();    
-    esp_err_t ota_err=ota_service_init();
+    //esp_err_t ota_err=ota_service_init();
     uint8_t primary;
     wifi_second_chan_t second;
     ESP_ERROR_CHECK(esp_wifi_get_channel(&primary, &second));
     
     esp_now_transport_config_t transport_config={.wifi_channel=primary};
 
+    ESP_LOGI(TAG,"primary channel %d",primary);
+    
     //The objcts created but callbacks not assigned. will be assigned later
-    esp_now_trasnsport_interface_t* espnow_transport=esp_now_transport_init(&transport_config);
+    ret=esp_now_transport_init(&transport_config);
 
-    if(espnow_transport==NULL)
+    if(ret==ESP_FAIL){
         ESP_LOGI(TAG,"transport init failed");
+        ESP_ERROR_CHECK(ret);
+    }
+
+
     
     peer_registry_config_t registry_config={.max_peers=2};
 
     peer_registry_interface_t* peer_registry=peer_registry_init(&registry_config);
     peer_registry->peer_registry_add_peer(GATE_NODE_ID,gate_node_mac,"gatenode");
-    espnow_transport->esp_now_transport_add_peer(gate_node_mac);
+    
 
     if(peer_registry==NULL)
         ESP_LOGI(TAG,"peer registry init failed");
@@ -139,26 +148,25 @@ void app_main(void)
     config_espnow_discovery discovery_config;
     //Must be an instance because config contains a pointer to it and 
     //unlike timer, peer_registry, its instance is not provided by any source
-    discovery_comm_interface_t discovery_comm_interface;
     
-    //Assign methods required by the discovery service component provided by the esp-now-comm component
-    discovery_comm_interface.acknowledge_the_discovery=espnow_transport->esp_now_transport_send_discovery_ack;
-    discovery_comm_interface.add_peer=espnow_transport->esp_now_transport_add_peer;
-    discovery_comm_interface.send_discovery=espnow_transport->esp_now_transport_send_discovery;
-    discovery_comm_interface.process_discovery_completion_callback=NULL;
+    esp_now_trasnsport_discovery_package_t* discovery_interface=esp_now_transport_get_discovery_interface();
+    //This interface struct contaains complete package required by message service
+    discovery_interface->peer_manager_interface.esp_now_transport_add_peer(gate_node_mac);
+    
+    database_interface_t database_interface = {.is_white_listed=peer_registry->peer_registry_exists_by_mac};
 
-    //Assign the discovery interface to the discovery member of discovery config
-    discovery_config.discovery=&discovery_comm_interface;
+    discovery_config.database_interface=&database_interface;
+    discovery_config.peer_manager_interface=&discovery_interface->peer_manager_interface;
+    discovery_config.discovery_interface=&discovery_interface->discovery_interface;
     
-    //The white list interface member assigned to the peer registry appropriate method
-    discovery_whitelist_interface_t white_list;
-    white_list.is_white_listed=peer_registry->peer_registry_exists_by_mac;
-    discovery_config.whitelist=&white_list;
+    
+    //Assign the discovery interface to the discovery member of discovery config
     discovery_config.discovery_duration=DISCOVERY_DURATION;
     discovery_config.discovery_interval=DISCOVERY_INTERVAL;
     
     ret=discovery_service_init(&discovery_config);
 
+    ESP_LOGI(TAG,"discovery init init done");
     //Now since discovery interface is created and it returned the handlers. now thoose handlers will be assigned to callbacks
 
     /*These are the callbacks which the esp-now-comm components require to call on the event and now provided by this service component
@@ -167,37 +175,15 @@ void app_main(void)
     */
 
     
-    
-
-
     //Message Service component
     //Assign the interface members required by the message service commponent
-    home_node_config_t home_config;
+    message_codec_config_t message_codec_config;
     
-    //This is redndant and needs to be optimized. discovery component has the same innterface
-    node_white_list_interface_t node_white_list;
-    node_white_list.is_in_whitelist=peer_registry->peer_registry_exists_by_mac;
-    //Must be an instance because config contains a pointer to it and 
-    //unlike timer, peer_registry, its instance is not provided by any source
-    home_config.white_list=&node_white_list;
-    node_msg_interface_t msg_interface;
-    msg_interface.send_msg=espnow_transport->esp_now_transport_send_data;
-    //The remaining callbacks of the esp_now_comm to the deserving targets
-    //So now esp_now_comm will invoke methods inside the message service sources
-    gate_node_id_interface_t gate_node_id;
-    gate_node_id.get_gate_node_mac=get_gate_node_mac;
-    
-    /*
-    user_input_config_t user_config={.open_button_gpio_no=5,
-                                .close_button_gpio_no=21,
-                                   };
-    */
-    
-    //user_input_interface_t* user_input=user_input_create(&user_config);
-    //user_interaction.inform_command_status=inform_command_status;
-    //user_interaction.inform_lock_status=inform_lock_status;
-    
-    //user_output_interface_t* user_output=user_output_create();
+    message_codec_config.database_interface=&database_interface;
+    esp_now_trasnsport_msg_package_t* message_interface=esp_now_transport_get_msg_interface();
+    message_codec_config.msg_interface=&message_interface->msg_interface;
+
+    message_codec_init(&message_codec_config);
 
 
     user_interaction_config_t interaction_config={ .gate_close_endpoint="/close-gate",
@@ -205,12 +191,6 @@ void app_main(void)
                                                   
                                                 };
     ret=user_interaction_create(&interaction_config);
-    home_config.gate_node_id=&gate_node_id;
-    home_config.msg_interface=&msg_interface;
-    
-
-    ret= home_node_service_create(&home_config);
-    
     
     
     
@@ -228,11 +208,11 @@ void app_main(void)
     start_discovery();
     
     //If OTA validation pending then validate now
-    if(ota_err==ERR_OTA_SERVICE_VALIDATION_PENDING)
-        ota_set_valid(true);
+    //if(ota_err==ERR_OTA_SERVICE_VALIDATION_PENDING)
+      //  ota_set_valid(true);
     while(1){
         //user_command(USER_COMMAND_LOCK_CLOSE);
-        vTaskDelay(pdMS_TO_TICKS(5000));
+        vTaskDelay(pdMS_TO_TICKS(1000));
         //user_command(USER_COMMAND_LOCK_OPEN);
         //vTaskDelay(pdMS_TO_TICKS(500));
     }
