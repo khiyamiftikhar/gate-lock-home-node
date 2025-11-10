@@ -23,15 +23,29 @@ static struct{
 
 }user_interaction={0};
 
+/*
 static esp_err_t inform_lock_status(lock_status_t status){
 
     ESP_LOGI(TAG,"not yet implemented");
     return ESP_OK;
-}
+}*/
     //When command is succesfully sent
-esp_err_t user_interaction_inform_command_status(bool success){  
-    ESP_LOGI(TAG,"push to queue %d",success);
-    xQueueSend(user_interaction.response_queue,&success,portMAX_DELAY);
+esp_err_t user_interaction_inform_command_status(bool success,void* context){  
+    
+    http_request_t** req=(http_request_t**)context;
+    
+    ESP_LOGI(TAG,"sending resp %d",success);
+
+    if(success){
+
+        user_interaction.server_interface->send_response(*req, "success");
+    }
+    else{
+        user_interaction.server_interface->send_response(*req,"Failed");
+    }
+    
+    user_interaction.server_interface->close_async_connection(*req);
+    
     return ESP_OK;
 
 }
@@ -43,28 +57,30 @@ static BaseType_t get_from_queue(TickType_t wait_time,bool* success){
     return ret;
 }
 
+
+
+
 static void gate_close_request_handler(http_request_t* request,const char* uri){
     BaseType_t ret=pdTRUE;
  
+    ESP_LOGI(TAG,"gate close handler entered");
     //Keep reading from queue until it is free from previous entries
-    bool success;
-    while(ret==pdTRUE){
-        ret=get_from_queue(0,&success);      //0 wait time
-    }
+    //bool success;
+    //while(ret==pdTRUE){
+     //   ret=get_from_queue(0,&success);      //0 wait time
+   /// }
     
+    //ESP_LOGI(TAG,"gate close proceed");
     //Now send new command. The data that will arrive in queue now belongs to this request
     esp_err_t err=0;
-    SERVER_ADAPTER_post_event(SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_CLOSE,NULL,0);
-    
-    
-    get_from_queue(portMAX_DELAY,&success);      //blocking call untill the espnow send callback pushes to queue
+    err=SERVER_ADAPTER_post_event(SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_CLOSE,&request,sizeof(request));
 
-    if(success)
-        user_interaction.server_interface->send_response(request,"Gate Closed");
-    else
-        user_interaction.server_interface->send_response(request,"Failed");
-    
-    
+    if (err != ESP_OK) {
+        user_interaction.server_interface->send_response(request,"failure");
+        user_interaction.server_interface->close_async_connection(request);
+        return;
+    }
+
     //return ESP_OK;
 
 }
@@ -73,26 +89,25 @@ static void gate_open_request_handler(http_request_t* request,const char* uri){
     
     
     BaseType_t ret=pdTRUE;
- 
+    ESP_LOGI(TAG,"gate open handler entered");
     //Keep reading from queue until it is free from previous entries
-    bool success;
-    while(ret==pdTRUE){
-        ret=get_from_queue(0,&success);      //0 wait time
-    }
+    //bool success;
+    //while(ret==pdTRUE){
+     //   ret=get_from_queue(0,&success);      //0 wait time
+   /// }
     
+    //ESP_LOGI(TAG,"gate open proceed");
     //Now send new command. The data that will arrive in queue now belongs to this request
     esp_err_t err=0;
-    SERVER_ADAPTER_post_event(SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_OPEN,NULL,0);
-    
-    
-    get_from_queue(portMAX_DELAY,&success);      //blocking call untill the espnow send callback pushes to queue
+    err=SERVER_ADAPTER_post_event(SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_OPEN ,&request,sizeof(request));
 
-    if(success)
-        user_interaction.server_interface->send_response(request,"Gate Opened");
-    else
-        user_interaction.server_interface->send_response(request,"Failed");
-    
-    
+    if (err != ESP_OK) {
+        user_interaction.server_interface->send_response(request,"failure");
+        user_interaction.server_interface->close_async_connection(request);
+        return;
+    }
+
+    //return ESP_OK;
     
  //   return ESP_OK;
     
@@ -125,9 +140,9 @@ esp_err_t user_interaction_create(user_interaction_config_t* config){
     //The response of esp send will be pushed to this queue by the method of output interface
     user_interaction.response_queue=xQueueCreate(QUEUE_SIZE,sizeof(bool));
 
-    SERVER_ADAPTER_register_event(SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_OPEN,NULL);
-    SERVER_ADAPTER_register_event(SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_CLOSE,NULL);
-    SERVER_ADAPTER_register_event(SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_STATUS,NULL);
+    SERVER_ADAPTER_register_event(SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_OPEN,NULL,NULL);
+    SERVER_ADAPTER_register_event(SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_CLOSE,NULL,NULL);
+    SERVER_ADAPTER_register_event(SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_STATUS,NULL,NULL);
 
      
 

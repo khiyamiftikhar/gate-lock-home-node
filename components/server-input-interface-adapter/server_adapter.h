@@ -2,7 +2,7 @@
 #define SERVER_ADAPTER_H
 
 
-#include "home_node.h"
+
 #include "event_system_adapter.h"
 #include "stdint.h"
 
@@ -32,8 +32,7 @@ typedef struct{
 /// @brief Inform whether request was sent successfully using espnow
 /// @param success 
 /// @return 
-esp_err_t user_interaction_inform_command_status(bool success);
-
+esp_err_t user_interaction_inform_command_status(bool success,void* context);
 esp_err_t user_interaction_create(user_interaction_config_t* config);
 
 #endif
