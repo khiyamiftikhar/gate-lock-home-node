@@ -3,6 +3,7 @@
 
 
 #include "esp_err.h"
+#include "event_system_adapter.h"
 
 
 #define     ERR_OTA_SERVICE_BASE                        0
@@ -12,6 +13,7 @@
 
 
 
+DECLARE_EVENT_ADAPTER(OTA_SERVICE);
 
 
 
