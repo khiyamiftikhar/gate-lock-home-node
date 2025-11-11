@@ -1,5 +1,5 @@
 #include "freertos/FreeRTOS.h"
-#include "freertos/Semphr.h"
+#include "freertos/semphr.h"
 #include <stdio.h>
 #include <string.h>
 #include <esp_log.h>

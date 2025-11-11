@@ -21,7 +21,7 @@
 #include "ota_service.h"
 #include "event_system_adapter.h"
 #include "routine_event_handler.h"
-#include "mdns_service.h"
+//#include "mdns_service.h"
 
 #define     ESPNOW_CHANNEL          1
 #define     DISCOVERY_DURATION      15000    //ms
@@ -114,7 +114,7 @@ void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 
-    esp_err_t ret=mdns_init_service();    
+    //1esp_err_t ret=mdns_init_service();    
     //esp_err_t ota_err=ota_service_init();
     uint8_t primary;
     wifi_second_chan_t second;
@@ -124,6 +124,7 @@ void app_main(void)
 
     ESP_LOGI(TAG,"primary channel %d",primary);
     
+    esp_err_t ret=0;
     //The objcts created but callbacks not assigned. will be assigned later
     ret=esp_now_transport_init(&transport_config);
 
