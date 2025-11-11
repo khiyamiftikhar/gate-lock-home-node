@@ -1,0 +1,17 @@
+menu "mDNS Configuration"
+
+config MDNS_HOSTNAME
+    string "mDNS Hostname"
+    default "esp32node"
+    help
+        The hostname used for mDNS advertising. 
+        This will be used as 'hostname.local' when discovering the ESP32.
+
+config MDNS_INSTANCE_NAME
+    string "mDNS Instance Name"
+    default "ESP32 Node"
+    help
+        A human-readable name shown when the device is discovered 
+        via mDNS (e.g., in network scanners or Bonjour browser).
+
+endmenu
