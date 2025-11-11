@@ -1,6 +1,5 @@
 #include "mdns_service.h"
 #include "mdns.h"
-#include "esp_err.h"
 #include "esp_log.h"
 //#include "sdkconfig.h"   // <-- Required to access Kconfig values
 
