@@ -1,7 +1,7 @@
 {
   "channel": "stable",
-  "latest_version": "v1.0.3i",
-  "updated_at": "2025-11-12T05:36:12Z",
+  "latest_version": "v1.0.3k",
+  "updated_at": "2025-11-13T04:56:52Z",
   "targets": ["esp32", "esp32c3"],
-  "changelog_url": "https://github.com/khiyamiftikhar/gate-lock-home-node/releases/tag/v1.0.3i"
+  "changelog_url": "https://github.com/khiyamiftikhar/gate-lock-home-node/releases/tag/v1.0.3k"
 }

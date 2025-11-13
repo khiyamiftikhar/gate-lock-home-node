@@ -1,9 +1,9 @@
 {
-  "version": "v1.0.3i",
+  "version": "v1.0.3k",
   "target": "esp32",
-  "firmware_url": "https://github.com/khiyamiftikhar/gate-lock-home-node/releases/download/v1.0.3i/firmware-ota-esp32-v1.0.3i.bin",
-  "firmware_size": 1030080,
-  "checksum": "5065794200884bdbee65f87b8dea96f89539dc16e4cfe7a70d69d3b8dbb24c65",
-  "release_date": "2025-11-12T05:35:55Z",
-  "changelog_url": "https://github.com/khiyamiftikhar/gate-lock-home-node/releases/tag/v1.0.3i"
+  "firmware_url": "https://github.com/khiyamiftikhar/gate-lock-home-node/releases/download/v1.0.3k/firmware-ota-esp32-v1.0.3k.bin",
+  "firmware_size": 1031104,
+  "checksum": "7957281015715d760077c84ace7da5460adf6f108562e5690baf5ef5c57e760e",
+  "release_date": "2025-11-13T04:56:27Z",
+  "changelog_url": "https://github.com/khiyamiftikhar/gate-lock-home-node/releases/tag/v1.0.3k"
 }
