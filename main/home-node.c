@@ -106,9 +106,9 @@ void app_main(void)
     esp_flash_init();
     event_system_adapter_init(routine_event_handler,NULL);
     //wifi_init();
-    wifi_smartconfig_t wifi_cfg={.callback=init_espnow};
+    wifi_smartconfig_t wifi_cfg={.callback=init_espnow, .power_save=false};
 
-    initialise_wifi(&wifi_cfg);
+    wifi_initialize(&wifi_cfg);
     
     //Wait until wifi connection is established
         while(proceed==false){
