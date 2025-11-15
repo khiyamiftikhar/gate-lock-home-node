@@ -32,19 +32,19 @@ static esp_err_t inform_lock_status(lock_status_t status){
     //When command is succesfully sent
 esp_err_t user_interaction_inform_command_status(bool success,void* context){  
     
-    http_request_t** req=(http_request_t**)context;
+    http_request_t* req=(http_request_t*)context;
     
     ESP_LOGI(TAG,"sending resp %d",success);
 
     if(success){
 
-        user_interaction.server_interface->send_response(*req, "success");
+        user_interaction.server_interface->send_response(req, "success");
     }
     else{
-        user_interaction.server_interface->send_response(*req,"Failed");
+        user_interaction.server_interface->send_response(req,"Failed");
     }
     
-    user_interaction.server_interface->close_async_connection(*req);
+    user_interaction.server_interface->close_async_connection(req);
     
     return ESP_OK;
 
@@ -99,6 +99,8 @@ static void gate_open_request_handler(http_request_t* request,const char* uri){
     //ESP_LOGI(TAG,"gate open proceed");
     //Now send new command. The data that will arrive in queue now belongs to this request
     esp_err_t err=0;
+    ESP_LOGI(TAG,"req address print %p",(void*)request);
+    ESP_LOGI(TAG,"req ptr address print %p",(void*)&request);
     err=SERVER_ADAPTER_post_event(SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_OPEN ,&request,sizeof(request));
 
     if (err != ESP_OK) {
