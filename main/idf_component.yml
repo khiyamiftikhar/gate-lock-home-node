@@ -22,7 +22,7 @@ dependencies:
   message_service:
     git: https://github.com/khiyamiftikhar/espnow-components
     path: message_service
-    #version: development/use-remote-links
+    version: development/add-send-ack-context
   peer-registry:
     git: https://github.com/khiyamiftikhar/espnow-components
     path: peer-registry
