@@ -603,8 +603,9 @@ static void ota_task(void *pvParameter)
             //task_fatal_error();
         }
         ESP_LOGI(TAG, "Prepare to restart system!");
-        esp_restart();
-        return ;
+        OTA_SERVICE_post_event(OTA_SERVICE_ROUTINE_EVENT_REBOOT_REQUIRED,NULL,0);
+        //esp_restart();
+        //return ;
     }
 }
 
@@ -676,6 +677,7 @@ esp_http_client_config_t config={0};
    
 
 
+    OTA_SERVICE_register_event(OTA_SERVICE_ROUTINE_EVENT_REBOOT_REQUIRED,NULL,NULL);
 
     
     /*

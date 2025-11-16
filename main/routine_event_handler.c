@@ -8,8 +8,9 @@
 #include "ota_service.h"
 #include "esp_now_transport.h"
 #include "message_codec.h"
-
+#include "esp_system.h"
 #include "server_adapter.h"
+#include "smartconfig.h"
 
 
 static const uint8_t gate_node_mac[]={0xe4,0x65,0xb8,0x1b,0x1c,0xd8};
@@ -74,7 +75,11 @@ static void routine_ota_service_events_handler(void *handler_arg,
                                     void *event_data){
     switch(id){
 
-        
+        case OTA_SERVICE_ROUTINE_EVENT_REBOOT_REQUIRED:
+            wifi_set_reconnect(false);
+            esp_restart();
+
+
         default:
             break;
     }
@@ -116,19 +121,25 @@ static void routine_server_adapter_events_handler (void *handler_arg,
 
     //a makeshift workaround to scan all the channels one by one
                                         
-    
+    esp_err_t ret=0;
+    void** context=(void**)event_data;
+    void* ctx=*context;
+
+    ESP_LOGI(TAG,"ctx ptr address print %p",context);
+    ESP_LOGI(TAG,"ctx address print %p",ctx);
+
     switch(id){
 
         case SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_OPEN:
-                message_codec_send_command(gate_node_mac ,MESSAGE_COMMAND_OPEN_LOCK);
+                ret=message_codec_send_command(gate_node_mac ,MESSAGE_COMMAND_OPEN_LOCK,ctx);
                 break;
 
 
         case SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_CLOSE:
-                message_codec_send_command(gate_node_mac,MESSAGE_COMMAND_CLOSE_LOCK);
+                ret=message_codec_send_command(gate_node_mac,MESSAGE_COMMAND_CLOSE_LOCK,ctx);
                 break;
         case SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_STATUS:
-                message_codec_send_command(gate_node_mac,MESSAGE_COMMAND_LOCK_STATUS);
+                ret=message_codec_send_command(gate_node_mac,MESSAGE_COMMAND_LOCK_STATUS,ctx);
                 break;
 
         default:
@@ -137,47 +148,38 @@ static void routine_server_adapter_events_handler (void *handler_arg,
     }
 
     //Right now responds true unconditionally
-    user_interaction_inform_command_status(true,event_data);
+    if(ret!=ESP_OK){
+        ESP_LOGI(TAG,"failure");
+        user_interaction_inform_command_status(false,ctx);
+    }
 
 }
 
 
 
-/*
-static void routine_espnow_transport_events_handler (void *handler_arg,
+
+static void routine_message_service_events_handler (void *handler_arg,
                                     int32_t id,
                                     void *event_data){
 
 
+
     switch(id){
 
-        case ESPNOW_TRANSPORT_ROUTINE_EVENT_DISCOVERY_INCOMING:{
-            uint8_t* src_mac=(uint8_t*)event_data;
-            ESP_LOGI(TAG,"discovery incoming");
-            discovery_events_handler(DISCOVERY_EVENT_DISCOVERY_MESSAGE_ARRIVED,src_mac);
-            break;
-        }
-        case ESPNOW_TRANSPORT_ROUTINE_EVENT_DISCOVERY_ACK_INCOMING:{
-            uint8_t* src_mac=(uint8_t*)event_data;
-            discovery_events_handler(DISCOVERY_EVENT_DISCOVERY_MESSAGE_ACK_ARRIVED,src_mac);
+        case MESSAGE_SERVICE_ROUTINE_EVENT_SEND_STATUS:{
+            
+            message_send_ack_t* msg_send_ack=(message_send_ack_t*)event_data;
+            ///context=(void**)msg_send_ack->context;
+            user_interaction_inform_command_status(msg_send_ack->success,msg_send_ack->context);
             break;
         }
         
-
-        case ESPNOW_TRANSPORT_ROUTINE_EVENT_MSG_SENT:{
-            espnow_msg_sent_status_t* msg=(espnow_msg_sent_status_t*)event_data;
-            ESP_LOGI(TAG,"success %d",msg->success);
-
-
-            break;
-        }
-
         default:
             break;
 
     }
  }
-*/
+
 
 
 
@@ -204,6 +206,11 @@ void routine_event_handler (void *handler_arg,
         else if(base==OTA_SERVICE_ROUTINE_EVENT_BASE){
             //ESP_LOGI(TAG,"routine discovery event");
             routine_ota_service_events_handler(handler_arg,id,event_data);
+        }   
+
+         else if(base==MESSAGE_CODEC_ROUTINE_EVENT_BASE){
+            //ESP_LOGI(TAG,"routine discovery event");
+            routine_message_service_events_handler(handler_arg,id,event_data);
         }   
 
     
