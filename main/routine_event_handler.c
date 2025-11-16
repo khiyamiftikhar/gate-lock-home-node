@@ -75,13 +75,17 @@ static void routine_ota_service_events_handler(void *handler_arg,
                                     void *event_data){
     switch(id){
 
+        //This happens on OTA
         case OTA_SERVICE_ROUTINE_EVENT_REBOOT_REQUIRED:
             wifi_set_reconnect(false);
             esp_restart();
             break;
-
+        //This occurs on the reboot after ota, firmware still requires verification
+        //If not verfied, it will be marked invalid, and skipped later on updates
         case OTA_SERVICE_ROUTINE_EVENT_VERIFICATION_PENDING:
             ota_set_valid(true);
+            wifi_set_reconnect(false);
+            esp_restart();
             break;
 
 
