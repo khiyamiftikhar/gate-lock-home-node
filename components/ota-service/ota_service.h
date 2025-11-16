@@ -9,14 +9,14 @@
 #define     ERR_OTA_SERVICE_BASE                        0
 #define     ERR_OTA_SERVICE_INIT_FAIL                   (ERR_OTA_SERVICE_BASE-1)
 #define     ERR_OTA_SERVICE_VALIDATION_PENDING          (ERR_OTA_SERVICE_BASE+5)
-#define     ERR_OTA_INVALID_VERSION                 (ERR_OTA_SERVICE_BASE-2)
+#define     ERR_OTA_INVALID_VERSION                     (ERR_OTA_SERVICE_BASE-2)
 
 
 
 DECLARE_EVENT_ADAPTER(OTA_SERVICE);
 
 
-
+#define     OTA_SERVICE_ROUTINE_EVENT_REBOOT_REQUIRED          1
 
 
 

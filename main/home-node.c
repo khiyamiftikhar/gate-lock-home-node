@@ -15,7 +15,7 @@
 #include "discovery_timer.h"
 #include "peer_registry.h"
 #include "message_codec.h"
-//#include "user_output.h"
+#include "mdns_service.h"
 #include "smartconfig.h"
 #include "server_adapter.h"
 #include "ota_service.h"
@@ -101,21 +101,23 @@ void init_espnow(){
 void app_main(void)
 {
     
+    esp_err_t ret=0;
     //esp_log_level_set("ESP_NOW_TRANSPORT", ESP_LOG_NONE);
     esp_flash_init();
     event_system_adapter_init(routine_event_handler,NULL);
     //wifi_init();
-    wifi_smartconfig_t wifi_cfg={.callback=init_espnow};
+    wifi_smartconfig_t wifi_cfg={.callback=init_espnow, .power_save=false};
 
-    initialise_wifi(&wifi_cfg);
+    wifi_initialize(&wifi_cfg);
     
     //Wait until wifi connection is established
         while(proceed==false){
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 
+    ret=mdns_service_start();
     //1esp_err_t ret=mdns_init_service();    
-    //esp_err_t ota_err=ota_service_init();
+    esp_err_t ota_err=ota_service_init();
     uint8_t primary;
     wifi_second_chan_t second;
     ESP_ERROR_CHECK(esp_wifi_get_channel(&primary, &second));
@@ -124,7 +126,7 @@ void app_main(void)
 
     ESP_LOGI(TAG,"primary channel %d",primary);
     
-    esp_err_t ret=0;
+    
     //The objcts created but callbacks not assigned. will be assigned later
     ret=esp_now_transport_init(&transport_config);
 

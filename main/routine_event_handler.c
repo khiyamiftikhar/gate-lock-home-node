@@ -8,8 +8,9 @@
 #include "ota_service.h"
 #include "esp_now_transport.h"
 #include "message_codec.h"
-
+#include "esp_system.h"
 #include "server_adapter.h"
+#include "smartconfig.h"
 
 
 static const uint8_t gate_node_mac[]={0xe4,0x65,0xb8,0x1b,0x1c,0xd8};
@@ -74,7 +75,11 @@ static void routine_ota_service_events_handler(void *handler_arg,
                                     void *event_data){
     switch(id){
 
-        
+        case OTA_SERVICE_ROUTINE_EVENT_REBOOT_REQUIRED:
+            wifi_set_reconnect(false);
+            esp_restart();
+
+
         default:
             break;
     }
