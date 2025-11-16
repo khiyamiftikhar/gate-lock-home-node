@@ -93,30 +93,28 @@ static void async_slot_free(httpd_req_t *req)
 }
 
 
-static esp_err_t relay_server_send_response(http_request_t* req, 
-                                   const char* data) {
-    if (!req || !data) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    
-    async_slot_t* asyn_request=(async_slot_t*)req;
+static esp_err_t relay_server_send_response(http_request_t* req, const char* data) {
+    if (!req || !data) return ESP_ERR_INVALID_ARG;
 
-    httpd_req_t* request=asyn_request->req;
-    // Set default headers
-    esp_err_t ret = httpd_resp_set_type(request, "text/plain");
-    if (ret != ESP_OK) {
-        return ret;
-    }
-    
-    ret = httpd_resp_set_hdr(request, "Cache-Control", "no-cache");
+    async_slot_t* asyn_request = (async_slot_t*)req;
+    httpd_req_t* request = asyn_request->req;
+
+    const char* uri = request->uri;   // <-- direct access
+
+    char resp[100];   // no malloc
+    httpd_resp_set_type(request, "text/plain");
+    httpd_resp_set_hdr(request, "Cache-Control", "no-cache");
     httpd_resp_set_hdr(request, "Connection", "close");
-    if (ret != ESP_OK) {
-        return ret;
-    }
-    
-    // Send response with specified length
-    return httpd_resp_send(request, data, strlen(data));
+
+    httpd_resp_send_chunk(request, request->uri, HTTPD_RESP_USE_STRLEN);
+    httpd_resp_send_chunk(request, ": ", 2);
+    httpd_resp_send_chunk(request, data, HTTPD_RESP_USE_STRLEN);
+    httpd_resp_send_chunk(request, NULL, 0);  // end
+
+    return ESP_OK;
 }
+
+
 
 static esp_err_t relay_server_send_error(http_request_t* req, 
                                 const char* error_msg) {
