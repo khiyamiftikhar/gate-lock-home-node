@@ -78,6 +78,12 @@ static void routine_ota_service_events_handler(void *handler_arg,
         case OTA_SERVICE_ROUTINE_EVENT_REBOOT_REQUIRED:
             wifi_set_reconnect(false);
             esp_restart();
+            break;
+
+        case OTA_SERVICE_ROUTINE_EVENT_VERIFICATION_PENDING:
+            ota_set_valid(true);
+            break;
+
 
 
         default:
