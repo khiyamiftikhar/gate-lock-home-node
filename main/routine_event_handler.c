@@ -179,6 +179,7 @@ static void routine_message_service_events_handler (void *handler_arg,
         case MESSAGE_SERVICE_ROUTINE_EVENT_SEND_STATUS:{
             
             message_send_ack_t* msg_send_ack=(message_send_ack_t*)event_data;
+            //ESP_LOGI(TAG,"success in event handler %d",msg_send_ack->success);
             ///context=(void**)msg_send_ack->context;
             user_interaction_inform_command_status(msg_send_ack->success,msg_send_ack->context);
             break;
