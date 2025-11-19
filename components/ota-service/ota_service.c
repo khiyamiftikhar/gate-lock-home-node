@@ -678,6 +678,7 @@ esp_http_client_config_t config={0};
 
 
     OTA_SERVICE_register_event(OTA_SERVICE_ROUTINE_EVENT_REBOOT_REQUIRED,NULL,NULL);
+    OTA_SERVICE_register_event(OTA_SERVICE_ROUTINE_EVENT_VERIFICATION_PENDING,NULL,NULL);
 
     
     /*
@@ -713,6 +714,7 @@ esp_http_client_config_t config={0};
         if (ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
             ESP_LOGE(TAG, "Firmware verification pending ...");
             ota_service_state.validation_pending=true;
+            OTA_SERVICE_post_event(OTA_SERVICE_ROUTINE_EVENT_VERIFICATION_PENDING,NULL,0);
             return ERR_OTA_SERVICE_VALIDATION_PENDING;
         }
     }

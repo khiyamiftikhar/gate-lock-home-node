@@ -116,7 +116,7 @@ void app_main(void)
     }
 
     ret=mdns_service_start();
-    //1esp_err_t ret=mdns_init_service();    
+    
     esp_err_t ota_err=ota_service_init();
     uint8_t primary;
     wifi_second_chan_t second;

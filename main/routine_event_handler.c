@@ -75,9 +75,19 @@ static void routine_ota_service_events_handler(void *handler_arg,
                                     void *event_data){
     switch(id){
 
+        //This happens on OTA
         case OTA_SERVICE_ROUTINE_EVENT_REBOOT_REQUIRED:
             wifi_set_reconnect(false);
             esp_restart();
+            break;
+        //This occurs on the reboot after ota, firmware still requires verification
+        //If not verfied, it will be marked invalid, and skipped later on updates
+        case OTA_SERVICE_ROUTINE_EVENT_VERIFICATION_PENDING:
+            ota_set_valid(true);
+            wifi_set_reconnect(false);
+            esp_restart();
+            break;
+
 
 
         default:
@@ -169,6 +179,7 @@ static void routine_message_service_events_handler (void *handler_arg,
         case MESSAGE_SERVICE_ROUTINE_EVENT_SEND_STATUS:{
             
             message_send_ack_t* msg_send_ack=(message_send_ack_t*)event_data;
+            //ESP_LOGI(TAG,"success in event handler %d",msg_send_ack->success);
             ///context=(void**)msg_send_ack->context;
             user_interaction_inform_command_status(msg_send_ack->success,msg_send_ack->context);
             break;
