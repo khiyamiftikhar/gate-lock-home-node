@@ -23,6 +23,8 @@ DECLARE_EVENT_ADAPTER(OTA_SERVICE);
 
 
 esp_err_t ota_set_valid(bool valid);
+esp_err_t ota_process_start(void);
+
 esp_err_t ota_service_init();
 
 

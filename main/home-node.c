@@ -21,6 +21,11 @@
 #include "ota_service.h"
 #include "event_system_adapter.h"
 #include "routine_event_handler.h"
+#include "gui_interface.h"
+#include "gui_op.h"
+#include "lcd_device.h"
+#include "sync_manager.h"
+
 //#include "mdns_service.h"
 
 #define     ESPNOW_CHANNEL          1
@@ -104,21 +109,40 @@ void app_main(void)
     
     esp_err_t ret=0;
     //esp_log_level_set("ESP_NOW_TRANSPORT", ESP_LOG_NONE);
+    
     esp_flash_init();
+
+    lcd_init();
+    gui_op_init();
+    sync_manager_init();
     event_system_adapter_init(routine_event_handler,NULL);
+
     //wifi_init();
+
+    gui_interface_t* gui_interface=gui_op_get_interface();
+
+
+    gui_interface->gui_inform(SYSTEM_BOOTING,NULL);
+
+
+    esp_err_t ota_err=ota_service_init();
+
     wifi_smartconfig_t wifi_cfg={.callback=init_espnow, .power_save=false};
 
     wifi_initialize(&wifi_cfg);
     
+    gui_interface->gui_inform(SYSTEM_WIFI_AP_SCANNING,NULL);
     //Wait until wifi connection is established
         while(proceed==false){
         vTaskDelay(pdMS_TO_TICKS(500));
     }
 
+    gui_interface->gui_inform(SYSTEM_WIFI_STA_CONNECTED,NULL);
     ret=mdns_service_start();
+
     
-    esp_err_t ota_err=ota_service_init();
+    
+    
     uint8_t primary;
     wifi_second_chan_t second;
     ESP_ERROR_CHECK(esp_wifi_get_channel(&primary, &second));
@@ -137,7 +161,7 @@ void app_main(void)
     }
 
 
-    
+    gui_interface->gui_inform(SYSTEM_ESPNOW_STARTED,NULL);
     peer_registry_config_t registry_config={.max_peers=2};
 
     peer_registry_interface_t* peer_registry=peer_registry_init(&registry_config);
@@ -214,6 +238,25 @@ void app_main(void)
     //If OTA validation pending then validate now
     //if(ota_err==ERR_OTA_SERVICE_VALIDATION_PENDING)
       //  ota_set_valid(true);
+    
+    
+    //Wait till discovery complete for OTA to start
+    sync_manager_signal_wait(SYNC_EVENT_DISCOVERY_COMPLETE,true,portMAX_DELAY);
+
+
+    ESP_LOGI("MEM", "Free heap: %u",
+         (unsigned int) esp_get_free_heap_size());
+
+    ESP_LOGI("MEM", "Min free heap: %u",
+         (unsigned int) esp_get_minimum_free_heap_size());
+
+        
+    
+
+
+
+    ota_process_start();
+
     while(1){
         //user_command(USER_COMMAND_LOCK_CLOSE);
         vTaskDelay(pdMS_TO_TICKS(1000));

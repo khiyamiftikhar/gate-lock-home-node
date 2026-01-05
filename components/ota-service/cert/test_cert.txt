@@ -1,0 +1,3 @@
+use this command to test a cert
+
+openssl s_client   -connect khiyamiftikhar.github.io:443   -servername khiyamiftikhar.github.io   -CAfile github_io_certs.txt   -verify_return_error </dev/null

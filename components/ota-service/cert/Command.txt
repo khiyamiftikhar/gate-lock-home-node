@@ -1,1 +1,21 @@
-echo | openssl s_client -servername khiyamiftikhar.github.io -connect khiyamiftikhar.github.io:443 -showcerts > github_certs.txt
+
+Two certificates are required, one for the manifest.json and other for the firmware download
+
+Use github bash bcz it already has ssl
+
+For manifest
+echo | openssl s_client -servername khiyamiftikhar.github.io -connect khiyamiftikhar.github.io:443 -showcerts > github_io_certs.txt
+
+For firmware
+
+echo | openssl s_client -servername github.com -connect github.com:443 -showcerts > github_com_certs.txt
+
+
+Now from both files copy the last (root) certificate in to a single file and include that file in cmakelist
+
+while copying make sure to include that begin of cert and end of cert. and give space between two certs
+
+
+
+another command
+curl -o aaa_root.pem https://crt.sh/?d=331986

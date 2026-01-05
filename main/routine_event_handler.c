@@ -11,6 +11,7 @@
 #include "esp_system.h"
 #include "server_adapter.h"
 #include "smartconfig.h"
+#include "sync_manager.h"
 
 
 //static const uint8_t gate_node_mac[]={0xe4,0x65,0xb8,0x1b,0x1c,0xd8};
@@ -113,6 +114,10 @@ static void routine_discovery_events_handler (void *handler_arg,
     switch(id){
 
         case DISCOVERY_EVENT_DISCOVERY_COMPLETE:
+
+                    sync_manager_signal_set(SYNC_EVENT_DISCOVERY_COMPLETE);
+
+
             break;
 
         default:
