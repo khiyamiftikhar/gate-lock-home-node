@@ -616,7 +616,7 @@ bool update_pending(){
 
 }
 
-static esp_err_t send_update_process_start_signal(){
+esp_err_t ota_process_start(void){
 
     xSemaphoreGive(ota_service_state.start_update);
     return ESP_OK;
@@ -629,7 +629,7 @@ esp_err_t ota_set_valid(bool valid){
         esp_ota_mark_app_valid_cancel_rollback();
         //Update maybe pending if previous was stopped because of an earlier verification pending
         if(update_pending())
-            send_update_process_start_signal();
+            ota_process_start();
     }
     else
         esp_ota_mark_app_invalid_rollback_and_reboot();
@@ -719,7 +719,11 @@ esp_http_client_config_t config={0};
         }
     }
 
-    send_update_process_start_signal();
+
+    
+
+
+    //send_update_process_start_signal();
     return ESP_OK;
     
 }
