@@ -111,7 +111,7 @@ void app_main(void)
     //esp_log_level_set("ESP_NOW_TRANSPORT", ESP_LOG_NONE);
     
     esp_flash_init();
-
+    
     lcd_init();
     gui_op_init();
     sync_manager_init();
