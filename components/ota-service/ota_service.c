@@ -48,7 +48,7 @@ typedef struct {
         bool update_available;
 } manifest_t;
 
-
+static void *ota_tls_heap_reserve = NULL;
 static struct{
     //char ota_write_data[BUFFSIZE + 1];
     SemaphoreHandle_t start_update;
@@ -658,7 +658,7 @@ static void set_fixed_time_for_tls(void){
 esp_err_t ota_service_init(){
     ESP_LOGI(TAG, "OTA example app_main start");
 
-esp_http_client_config_t config={0};
+    esp_http_client_config_t config={0};
 
     config.url = "http://example.com";    //Some random address which will be replaced before request
     config.cert_pem = (char *)server_cert_pem_start;
@@ -678,6 +678,15 @@ esp_http_client_config_t config={0};
         return ERR_OTA_SERVICE_INIT_FAIL;
     }
  
+    /* 🔒 Reserve TLS heap EARLY 
+    if (ota_tls_heap_reserve == NULL) {
+        ota_tls_heap_reserve = heap_caps_malloc(24 * 1024, MALLOC_CAP_8BIT);
+        if (!ota_tls_heap_reserve) {
+            ESP_LOGE(TAG, "Failed to reserve TLS heap");
+            return ESP_FAIL;
+        }
+    }*/
+
 
      ota_service_state.start_update=xSemaphoreCreateBinary();
 
@@ -733,7 +742,7 @@ esp_http_client_config_t config={0};
     }
 
 
-    set_fixed_time_for_tls();
+    //t_fixed_time_for_tls();
 
 
 
