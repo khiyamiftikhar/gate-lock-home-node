@@ -6,6 +6,9 @@
    software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
    CONDITIONS OF ANY KIND, either express or implied.
 */
+#include <sys/time.h>
+
+#include <time.h>
 #include <string.h>
 #include <inttypes.h>
 #include <stdbool.h>
@@ -45,7 +48,7 @@ typedef struct {
         bool update_available;
 } manifest_t;
 
-
+static void *ota_tls_heap_reserve = NULL;
 static struct{
     //char ota_write_data[BUFFSIZE + 1];
     SemaphoreHandle_t start_update;
@@ -103,7 +106,6 @@ static void infinite_loop(void)
         vTaskDelay(2000 / portTICK_PERIOD_MS);
     }
 }
-
 
 
 ///
@@ -638,10 +640,25 @@ esp_err_t ota_set_valid(bool valid){
 }
 
 
+static void set_fixed_time_for_tls(void){
+    struct timeval tv = {
+        .tv_sec = 1760000000,  // Oct 2025 (inside GitHub cert validity)
+        .tv_usec = 0
+    };
+
+    settimeofday(&tv, NULL);
+
+    time_t now;
+    time(&now);
+    ESP_LOGE("TLS_TIME", "System time set to: %lld", now);
+}
+
+
+
 esp_err_t ota_service_init(){
     ESP_LOGI(TAG, "OTA example app_main start");
 
-esp_http_client_config_t config={0};
+    esp_http_client_config_t config={0};
 
     config.url = "http://example.com";    //Some random address which will be replaced before request
     config.cert_pem = (char *)server_cert_pem_start;
@@ -661,6 +678,15 @@ esp_http_client_config_t config={0};
         return ERR_OTA_SERVICE_INIT_FAIL;
     }
  
+    /* 🔒 Reserve TLS heap EARLY 
+    if (ota_tls_heap_reserve == NULL) {
+        ota_tls_heap_reserve = heap_caps_malloc(24 * 1024, MALLOC_CAP_8BIT);
+        if (!ota_tls_heap_reserve) {
+            ESP_LOGE(TAG, "Failed to reserve TLS heap");
+            return ESP_FAIL;
+        }
+    }*/
+
 
      ota_service_state.start_update=xSemaphoreCreateBinary();
 
@@ -675,10 +701,6 @@ esp_http_client_config_t config={0};
         return ERR_OTA_SERVICE_INIT_FAIL;
 
    
-
-
-    OTA_SERVICE_register_event(OTA_SERVICE_ROUTINE_EVENT_REBOOT_REQUIRED,NULL,NULL);
-    OTA_SERVICE_register_event(OTA_SERVICE_ROUTINE_EVENT_VERIFICATION_PENDING,NULL,NULL);
 
     
     /*
@@ -719,6 +741,18 @@ esp_http_client_config_t config={0};
         }
     }
 
+
+    //t_fixed_time_for_tls();
+
+
+
+    
+ 
+
+
+
+    OTA_SERVICE_register_event(OTA_SERVICE_ROUTINE_EVENT_REBOOT_REQUIRED,NULL,NULL);
+    OTA_SERVICE_register_event(OTA_SERVICE_ROUTINE_EVENT_VERIFICATION_PENDING,NULL,NULL);
 
     
 

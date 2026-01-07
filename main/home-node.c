@@ -111,7 +111,7 @@ void app_main(void)
     //esp_log_level_set("ESP_NOW_TRANSPORT", ESP_LOG_NONE);
     
     esp_flash_init();
-
+    
     lcd_init();
     gui_op_init();
     sync_manager_init();
@@ -125,7 +125,6 @@ void app_main(void)
     gui_interface->gui_inform(SYSTEM_BOOTING,NULL);
 
 
-    esp_err_t ota_err=ota_service_init();
 
     wifi_smartconfig_t wifi_cfg={.callback=init_espnow, .power_save=false};
 
@@ -254,6 +253,7 @@ void app_main(void)
     
 
 
+    esp_err_t ota_err=ota_service_init();
 
     ota_process_start();
 

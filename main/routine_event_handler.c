@@ -253,7 +253,7 @@ esp_err_t routine_handler_init(){
         BaseType_t res = xTaskCreatePinnedToCore(
             delegate_run_task,
             "run delegated tasks",
-            3072,          // stack size
+            2048,        // stack size
             NULL,
             5,             // priority
             &delegate_task_handle,
