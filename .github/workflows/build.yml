@@ -3,7 +3,7 @@ on:
   push:
     branches:
       - main
-      - development/use-new-event-adapter
+      - fix/gui-use-remote-lvgl
     tags:        # ← NEW: Trigger on version tags
       - 'v*'
   pull_request:
