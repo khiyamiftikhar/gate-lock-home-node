@@ -364,7 +364,7 @@ esp_err_t http_server_init(http_server_config_t* config){
 
     
         ESP_LOGI(TAG,"Server Init Failed");
-        return NULL;
+        return ESP_FAIL;
     }
 
     http_server.pool_mutex = xSemaphoreCreateMutex();
@@ -373,7 +373,7 @@ esp_err_t http_server_init(http_server_config_t* config){
         async_pool[i].in_use = false;
     }
 
-    return &http_server.interface;
+    return ESP_OK;
 }
 
 
