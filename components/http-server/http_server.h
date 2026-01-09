@@ -28,7 +28,7 @@ typedef struct {
     esp_err_t (*send_error_response)(http_request_t* req,const char* message);
 
     esp_err_t (*close_async_connection)(http_request_t* req);
-}relay_server_interface_t;
+}http_server_interface_t;
 
 
 
@@ -43,14 +43,23 @@ typedef struct {
     uint8_t max_uris;                // How many different URIs to support (default: 10)
     uint16_t max_connections;        // Max simultaneous clients (default: 4)
 
-} relay_server_config_t;
+} http_server_config_t;
+
+
+#define HTTP_SERVER_DEFAULT_CONFIG()   \
+    {                                  \
+        .port = 80,                    \
+        .protocol = PROTOCOL_HTTP,     \
+        .max_uris = 10,                \
+        .max_connections = 4,          \
+    }
 
 
 
 
+http_server_interface_t* http_server_get_interface();
+esp_err_t http_server_init(http_server_config_t* config);
 
-
-relay_server_interface_t* relay_server_init(relay_server_config_t* config);
 
 
 
