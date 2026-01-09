@@ -1,5 +1,5 @@
-#ifndef SERVER_ADAPTER_H
-#define SERVER_ADAPTER_H
+#ifndef USER_REQUEST_H
+#define USER_REQUEST_H
 
 
 
