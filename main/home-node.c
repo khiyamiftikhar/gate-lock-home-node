@@ -17,7 +17,6 @@
 #include "message_codec.h"
 #include "mdns_service.h"
 #include "smartconfig.h"
-#include "server_adapter.h"
 #include "ota_service.h"
 #include "event_system_adapter.h"
 #include "routine_event_handler.h"
@@ -25,6 +24,10 @@
 #include "gui_op.h"
 #include "lcd_device.h"
 #include "sync_manager.h"
+#include "log_capture.h"
+#include "user_output.h"
+#include "user_request.h"
+
 
 //#include "mdns_service.h"
 
@@ -116,6 +119,9 @@ void app_main(void)
     gui_op_init();
     sync_manager_init();
     event_system_adapter_init(routine_event_handler,NULL);
+
+    
+    log_capture_init();
 
     //wifi_init();
 
@@ -213,14 +219,12 @@ void app_main(void)
     message_codec_init(&message_codec_config);
 
 
-    user_interaction_config_t interaction_config={ .gate_close_endpoint="/close-gate",
+    user_request_config_t request_config={ .gate_close_endpoint="/close-gate",
                                                     .gate_open_endpoint="/open-gate",
                                                   
                                                 };
-    ret=user_interaction_create(&interaction_config);
-    
-    
-    
+    ret=user_request_create(&request_config);
+    user_request_response_create();
 
     
     ESP_LOGI(TAG,"before register");
