@@ -10,6 +10,9 @@
 // ------------------------------
 // UI SCREEN STRUCTURE
 // ------------------------------
+// ------------------------------
+// UI SCREEN STRUCTURE
+// ------------------------------
 ui_screen_t home_screen = {
     .name = "Home_Screen",
     .child_count = 3,
@@ -19,7 +22,7 @@ ui_screen_t home_screen = {
             .id = "wifi_ssid",
             .lv_obj = NULL,
             .x = 57, .y = 0,
-            .w = 47, .h = 13,
+            .w = 46, .h = 26,
             .icon = NULL,
             .current_state = 0,
             .text = "",
@@ -30,7 +33,7 @@ ui_screen_t home_screen = {
             .id = "discovery_msg",
             .lv_obj = NULL,
             .x = 0, .y = 1,
-            .w = 54, .h = 13,
+            .w = 52, .h = 26,
             .icon = NULL,
             .current_state = 0,
             .text = "",
@@ -40,8 +43,8 @@ ui_screen_t home_screen = {
             .type = UI_CHILD_LABEL,
             .id = "main_label",
             .lv_obj = NULL,
-            .x = 2, .y = 14,
-            .w = 123, .h = 16,
+            .x = 2, .y = 31,
+            .w = 122, .h = 28,
             .icon = NULL,
             .current_state = 0,
             .text = "",
@@ -50,6 +53,7 @@ ui_screen_t home_screen = {
     },
     .lv_screen = NULL
 };
+
 
 // ------------------------------
 // UI JOB DATA STRUCTS
