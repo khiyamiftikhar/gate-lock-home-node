@@ -4,7 +4,7 @@
 #include <string.h>
 #include <esp_log.h>
 #include <esp_http_server.h>
-#include "relay_server.h"
+#include "http_server.h"
 
 #define         MAX_URIS                    5
 #define         MAX_URI_LENGTH              15
@@ -13,7 +13,7 @@ typedef struct {
     char uri[MAX_URI_LENGTH];           // Points to user's string literal
     request_callback callback;
     request_method_t method;     // HTTP_GET, HTTP_POST, etc.
-} relay_uri_record_t;
+} http_uri_record_t;
 
 
 // Static pool
@@ -35,12 +35,12 @@ static async_slot_t async_pool[MAX_ASYNC_REQUESTS];
 
 static struct{
     httpd_handle_t server_handle;
-    relay_server_interface_t interface;
+    http_server_interface_t interface;
     //request_callback cb;
-    relay_uri_record_t uri_record[MAX_URIS];
+    http_uri_record_t uri_record[MAX_URIS];
     SemaphoreHandle_t pool_mutex;
     int uri_count;
-}relay_server={0};
+}http_server={0};
   
 
 
@@ -61,7 +61,7 @@ static const char *TAG = "HTTP Server";
 
 static async_slot_t* async_slot_allocate(httpd_req_t *req)
 {
-    xSemaphoreTake(relay_server.pool_mutex, portMAX_DELAY);
+    xSemaphoreTake(http_server.pool_mutex, portMAX_DELAY);
     async_slot_t *slot = NULL;
     for (int i = 0; i < MAX_ASYNC_REQUESTS; i++) {
         if (!async_pool[i].in_use) {
@@ -72,7 +72,7 @@ static async_slot_t* async_slot_allocate(httpd_req_t *req)
             break;
         }
     }
-    xSemaphoreGive(relay_server.pool_mutex);
+    xSemaphoreGive(http_server.pool_mutex);
 
     
     return slot;  // NULL if no free slot
@@ -80,7 +80,7 @@ static async_slot_t* async_slot_allocate(httpd_req_t *req)
 
 static void async_slot_free(httpd_req_t *req)
 {
-    xSemaphoreTake(relay_server.pool_mutex, portMAX_DELAY);
+    xSemaphoreTake(http_server.pool_mutex, portMAX_DELAY);
     for (int i = 0; i < MAX_ASYNC_REQUESTS; i++) {
         if (async_pool[i].in_use && async_pool[i].req == req) {
             async_pool[i].req = NULL;
@@ -89,11 +89,11 @@ static void async_slot_free(httpd_req_t *req)
             break;
         }
     }
-    xSemaphoreGive(relay_server.pool_mutex);
+    xSemaphoreGive(http_server.pool_mutex);
 }
 
 
-static esp_err_t relay_server_send_response(http_request_t* req, const char* data) {
+static esp_err_t http_server_send_response(http_request_t* req, const char* data) {
     if (!req || !data) return ESP_ERR_INVALID_ARG;
 
     async_slot_t* asyn_request = (async_slot_t*)req;
@@ -116,7 +116,7 @@ static esp_err_t relay_server_send_response(http_request_t* req, const char* dat
 
 
 
-static esp_err_t relay_server_send_error(http_request_t* req, 
+static esp_err_t http_server_send_error(http_request_t* req, 
                                 const char* error_msg) {
     if (!req) {
         return ESP_ERR_INVALID_ARG;
@@ -167,7 +167,7 @@ static esp_err_t relay_server_send_json_response(httpd_req_t* req,
 
 
 
-static esp_err_t relay_server_send_html_response(httpd_req_t* req,
+static esp_err_t http_server_send_html_response(httpd_req_t* req,
                                         const char* html_data,
                                         size_t len) {
     if (!req || !html_data) {
@@ -187,7 +187,7 @@ static esp_err_t relay_server_send_html_response(httpd_req_t* req,
     return httpd_resp_send(req, html_data, len);
 }
 
-static esp_err_t relay_server_send_chunk(httpd_req_t* req,
+static esp_err_t http_server_send_chunk(httpd_req_t* req,
                                 const char* chunk_data,
                                 size_t len) {
     if (!req) {
@@ -198,7 +198,7 @@ static esp_err_t relay_server_send_chunk(httpd_req_t* req,
     return httpd_resp_send_chunk(req, chunk_data, len);
 }
 
-static esp_err_t relay_server_end_response(httpd_req_t* req) {
+static esp_err_t http_server_end_response(httpd_req_t* req) {
     if (!req) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -208,7 +208,7 @@ static esp_err_t relay_server_end_response(httpd_req_t* req) {
 }
 
 
-static esp_err_t relay_server_send_status_error(httpd_req_t* req,
+static esp_err_t http_server_send_status_error(httpd_req_t* req,
                                        int status_code,
                                        const char* error_msg) {
     if (!req) {
@@ -252,7 +252,7 @@ static esp_err_t relay_server_send_status_error(httpd_req_t* req,
     return httpd_resp_send(req, msg, strlen(msg));
 }
 
-esp_err_t relay_server_close_async_connection(http_request_t *req){
+esp_err_t http_server_close_async_connection(http_request_t *req){
 
     esp_err_t ret=0;
     async_slot_t* asyn_request=(async_slot_t*)req;
@@ -280,8 +280,8 @@ static esp_err_t master_request_handler(httpd_req_t *req){
     
     
     // Linear search through registered URIs
-    for (size_t i = 0; i < relay_server.uri_count; i++) {
-        if (strcmp(relay_server.uri_record[i].uri, req->uri) == 0) {
+    for (size_t i = 0; i < http_server.uri_count; i++) {
+        if (strcmp(http_server.uri_record[i].uri, req->uri) == 0) {
 
             ESP_LOGI(TAG,"record i %d, uri %s",i,req->uri);
             // Found matching URI, call user callback
@@ -290,7 +290,7 @@ static esp_err_t master_request_handler(httpd_req_t *req){
             httpd_req_async_handler_begin(req, &async_req);
             async_slot_t* async_slot = async_slot_allocate(async_req);
             if(async_slot==NULL){
-                relay_server_send_status_error(req,
+                http_server_send_status_error(req,
                                        503,
                                        "Server Busy"); 
                 httpd_req_async_handler_complete(req);
@@ -299,32 +299,32 @@ static esp_err_t master_request_handler(httpd_req_t *req){
             
             
 
-            relay_server.uri_record[i].callback((http_request_t*)async_slot, async_req->uri);
+            http_server.uri_record[i].callback((http_request_t*)async_slot, async_req->uri);
             return ESP_OK;
         }
     }
     
     // No handler found
     //http_request_t request={.req=req};
-    relay_server_send_error((http_request_t*)req, "404 Not Found");
+    http_server_send_error((http_request_t*)req, "404 Not Found");
     return ESP_OK;
 }
 
 
-static esp_err_t relay_server_register_uri(const char* uri,request_method_t method,request_callback cb){
+static esp_err_t http_server_register_uri(const char* uri,request_method_t method,request_callback cb){
     if(uri==NULL || cb==NULL || strlen(uri)>MAX_URI_LENGTH)
         return ESP_ERR_INVALID_ARG;
 
-    int uri_count=relay_server.uri_count;
-    relay_server.uri_record[uri_count].callback=cb;
-    memcpy(relay_server.uri_record[uri_count].uri,uri,strlen(uri));
-    relay_server.uri_record[uri_count].method=method;
+    int uri_count=http_server.uri_count;
+    http_server.uri_record[uri_count].callback=cb;
+    memcpy(http_server.uri_record[uri_count].uri,uri,strlen(uri));
+    http_server.uri_record[uri_count].method=method;
 
     
-    ESP_LOGI(TAG,"uri %s",relay_server.uri_record[uri_count].uri);
+    ESP_LOGI(TAG,"uri %s",http_server.uri_record[uri_count].uri);
     // Register with ESP-IDF HTTP server
     httpd_uri_t esp_uri = {
-        .uri = relay_server.uri_record[uri_count].uri,
+        .uri = http_server.uri_record[uri_count].uri,
         .method = HTTP_GET,     //The supplied methid not used as it requires enum type translation
         .handler = master_request_handler,
         .user_ctx = NULL  // Pass our server context
@@ -333,15 +333,20 @@ static esp_err_t relay_server_register_uri(const char* uri,request_method_t meth
 
 //    cb(NULL,"/close-gate");
   //  cb(NULL,"/open-gate");
-    relay_server.uri_count++;
-    
-    return httpd_register_uri_handler(relay_server.server_handle, &esp_uri);
+    http_server.uri_count++;
+    return httpd_register_uri_handler(http_server.server_handle, &esp_uri);
+}
+
+
+http_server_interface_t* http_server_get_interface(){
+    if(http_server.server_handle==NULL)
+        return NULL;
+    return &http_server.interface;
 }
 
 
 
-
-relay_server_interface_t* relay_server_init(relay_server_config_t* config){
+esp_err_t http_server_init(http_server_config_t* config){
 
     httpd_config_t http_config = HTTPD_DEFAULT_CONFIG();
     http_config.max_open_sockets = config->max_connections;
@@ -349,33 +354,30 @@ relay_server_interface_t* relay_server_init(relay_server_config_t* config){
     http_config.server_port = config->port;
     
 
-    relay_server.interface.register_uri=relay_server_register_uri;
-    relay_server.interface.send_response=relay_server_send_response;
-    relay_server.interface.send_error_response=relay_server_send_error;
-    relay_server.interface.close_async_connection=relay_server_close_async_connection;
+    http_server.interface.register_uri=http_server_register_uri;
+    http_server.interface.send_response=http_server_send_response;
+    http_server.interface.send_error_response=http_server_send_error;
+    http_server.interface.close_async_connection=http_server_close_async_connection;
 
     ESP_LOGI(TAG, "Starting HTTP Server");
-    if( httpd_start(&relay_server.server_handle, &http_config) != ESP_OK){
+    if( httpd_start(&http_server.server_handle, &http_config) != ESP_OK){
 
     
         ESP_LOGI(TAG,"Server Init Failed");
-        return NULL;
+        return ESP_FAIL;
     }
 
-    relay_server.pool_mutex = xSemaphoreCreateMutex();
+    http_server.pool_mutex = xSemaphoreCreateMutex();
     for (int i = 0; i < MAX_ASYNC_REQUESTS; i++) {
         async_pool[i].req = NULL;
         async_pool[i].in_use = false;
     }
 
-    return &relay_server.interface;
-
-
+    return ESP_OK;
 }
 
 
 
 esp_err_t stopHttpServer(){
-    return httpd_stop(relay_server.server_handle);
-
+    return httpd_stop(http_server.server_handle);
 }

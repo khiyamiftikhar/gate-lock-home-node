@@ -36,3 +36,6 @@ dependencies:
 
   sync-manager:
     git: https://github.com/khiyamiftikhar/sync-manager
+
+  log-capture:
+    git: https://github.com/khiyamiftikhar/log-capture

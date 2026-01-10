@@ -9,7 +9,8 @@
 #include "esp_now_transport.h"
 #include "message_codec.h"
 #include "esp_system.h"
-#include "server_adapter.h"
+#include "user_output.h"
+#include "user_request.h"
 #include "smartconfig.h"
 #include "sync_manager.h"
 
@@ -131,7 +132,7 @@ static void routine_discovery_events_handler (void *handler_arg,
 
 
 
-static void routine_server_adapter_events_handler (void *handler_arg,
+static void routine_user_request_events_handler (void *handler_arg,
                                     int32_t id,
                                     void *event_data){
 
@@ -146,15 +147,15 @@ static void routine_server_adapter_events_handler (void *handler_arg,
 
     switch(id){
 
-        case SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_OPEN:
+        case USER_REQUEST_ROUTINE_EVENT_USER_COMMAND_GATE_OPEN:
                 ret=message_codec_send_command(gate_node_mac ,MESSAGE_COMMAND_OPEN_LOCK,ctx);
                 break;
 
 
-        case SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_CLOSE:
+        case USER_REQUEST_ROUTINE_EVENT_USER_COMMAND_GATE_CLOSE:
                 ret=message_codec_send_command(gate_node_mac,MESSAGE_COMMAND_CLOSE_LOCK,ctx);
                 break;
-        case SERVER_ADAPTER_ROUTINE_EVENT_USER_COMMAND_GATE_STATUS:
+        case USER_REQUEST_ROUTINE_EVENT_USER_COMMAND_GATE_STATUS:
                 ret=message_codec_send_command(gate_node_mac,MESSAGE_COMMAND_LOCK_STATUS,ctx);
                 break;
 
@@ -166,7 +167,7 @@ static void routine_server_adapter_events_handler (void *handler_arg,
     //Right now responds true unconditionally
     if(ret!=ESP_OK){
         ESP_LOGI(TAG,"failure");
-        user_interaction_inform_command_status(false,ctx);
+        user_request_response_inform_command_status(false,ctx);
     }
 
 }
@@ -187,7 +188,7 @@ static void routine_message_service_events_handler (void *handler_arg,
             message_send_ack_t* msg_send_ack=(message_send_ack_t*)event_data;
             //ESP_LOGI(TAG,"success in event handler %d",msg_send_ack->success);
             ///context=(void**)msg_send_ack->context;
-            user_interaction_inform_command_status(msg_send_ack->success,msg_send_ack->context);
+            user_request_response_inform_command_status(msg_send_ack->success,msg_send_ack->context);
             break;
         }
         
@@ -215,9 +216,9 @@ void routine_event_handler (void *handler_arg,
             routine_discovery_events_handler(handler_arg,id,event_data);
         }
          
-        else if(base==SERVER_ADAPTER_ROUTINE_EVENT_BASE){
+        else if(base==USER_REQUEST_ROUTINE_EVENT_BASE){
             //ESP_LOGI(TAG,"routine discovery event");
-            routine_server_adapter_events_handler(handler_arg,id,event_data);
+            routine_user_request_events_handler(handler_arg,id,event_data);
         }
 
         else if(base==OTA_SERVICE_ROUTINE_EVENT_BASE){
