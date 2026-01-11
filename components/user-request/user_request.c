@@ -27,6 +27,32 @@ static struct{
 
 
 
+static void log_request_handler(http_request_t* request,const char* uri){
+    BaseType_t ret=pdTRUE;
+ 
+    ESP_LOGI(TAG,"log handler entered");
+    //Keep reading from queue until it is free from previous entries
+    //bool success;
+    //while(ret==pdTRUE){
+     //   ret=get_from_queue(0,&success);      //0 wait time
+   /// }
+    
+    //ESP_LOGI(TAG,"gate close proceed");
+    //Now send new command. The data that will arrive in queue now belongs to this request
+    esp_err_t err=0;
+    err=USER_REQUEST_post_event(USER_REQUEST_ROUTINE_EVENT_USER_COMMAND_LOG,&request,sizeof(request));
+
+    if (err != ESP_OK) {
+        user_request_state.server_interface->send_response(request,"failure");
+        user_request_state.server_interface->close_async_connection(request);
+        return;
+    }
+
+    //return ESP_OK;
+
+}
+
+
 
 
 static void gate_close_request_handler(http_request_t* request,const char* uri){
