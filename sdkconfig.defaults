@@ -11,3 +11,6 @@ CONFIG_LOG_DEFAULT_LEVEL_INFO=y
 
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions_custom.csv"
+
+#Dynamic buffer required bcz contiguous mem not available for mbedtls
+CONFIG_MBEDTLS_DYNAMIC_BUFFER=y

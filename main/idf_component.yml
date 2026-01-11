@@ -14,7 +14,7 @@ dependencies:
   esp-now-comm:
     git: https://github.com/khiyamiftikhar/espnow-components
     path: esp-now-comm
-    #version: fix/send-ack-bug
+    #version: fix/use-new-idfv5.5
   discovery_service:
     git: https://github.com/khiyamiftikhar/espnow-components
     path: discovery_service
