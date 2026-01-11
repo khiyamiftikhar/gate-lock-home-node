@@ -120,7 +120,8 @@ void app_main(void)
     sync_manager_init();
     event_system_adapter_init(routine_event_handler,NULL);
 
-    
+    routine_handler_init();
+
     log_capture_init();
 
     //wifi_init();
@@ -221,8 +222,9 @@ void app_main(void)
 
     user_request_config_t request_config={ .gate_close_endpoint="/close-gate",
                                                     .gate_open_endpoint="/open-gate",
+                                                    .log_endpoint="/get-log"
                                                   
-                                                };
+                                         };
     ret=user_request_create(&request_config);
     user_request_response_create();
 
