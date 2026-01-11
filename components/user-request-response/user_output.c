@@ -26,6 +26,23 @@ static esp_err_t inform_lock_status(lock_status_t status){
     return ESP_OK;
 }*/
     //When command is succesfully sent
+esp_err_t user_request_response_send_log(char* log_data,size_t length,void* context){
+    
+    //Send response
+    http_request_t* req=(http_request_t*)context;
+
+    if(log_data==NULL || length==0){
+        user_interaction.server_interface->close_async_connection(req);
+        return ESP_FAIL;
+    }
+
+    user_interaction.server_interface->send_response(req,log_data);
+    //Close connection
+    
+
+    return ESP_OK;
+}   
+
 esp_err_t user_request_response_inform_command_status(bool success,void* context){  
     
     http_request_t* req=(http_request_t*)context;
