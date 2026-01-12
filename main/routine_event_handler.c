@@ -49,13 +49,14 @@ static void delegated_to_task_send_log(void *arg, size_t len){
     size_t bytes_read;
 
     log_snapshot_take(&snap);
-
+    uint8_t count=0;
+    
     do{
         bytes_read=log_snapshot_read(&snap,buffer,sizeof(buffer)-1);
         if(bytes_read>0){
             buffer[bytes_read]='\0';   //null terminate
             user_request_response_send_log(buffer,bytes_read,arg);
-            ESP_LOGI(TAG,"log chunk %s",buffer);            
+            ESP_LOGI(TAG,"log chunk %d, length %d",count++,bytes_read);            
         }
         else{
             ESP_LOGI(TAG,"no more log data");
