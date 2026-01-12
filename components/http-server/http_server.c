@@ -21,6 +21,7 @@ typedef struct {
 
 typedef struct {
     httpd_req_t *req;   // pointer to async request
+    bool response_started;
     bool in_use;
 } async_slot_t;
 
@@ -85,6 +86,7 @@ static void async_slot_free(httpd_req_t *req)
         if (async_pool[i].in_use && async_pool[i].req == req) {
             async_pool[i].req = NULL;
             async_pool[i].in_use = false;
+            async_pool[i].response_started=false;
             ESP_LOGI(TAG, "Freed slot %d for req %p", i, req);
             break;
         }
@@ -113,6 +115,9 @@ static esp_err_t http_server_send_response(http_request_t* req, const char* data
 
     return ESP_OK;
 }
+
+
+
 
 
 
@@ -187,26 +192,6 @@ static esp_err_t http_server_send_html_response(httpd_req_t* req,
     return httpd_resp_send(req, html_data, len);
 }
 
-static esp_err_t http_server_send_chunk(httpd_req_t* req,
-                                const char* chunk_data,
-                                size_t len) {
-    if (!req) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    
-    // For streaming responses
-    return httpd_resp_send_chunk(req, chunk_data, len);
-}
-
-static esp_err_t http_server_end_response(httpd_req_t* req) {
-    if (!req) {
-        return ESP_ERR_INVALID_ARG;
-    }
-    
-    // End chunked response
-    return httpd_resp_send_chunk(req, NULL, 0);
-}
-
 
 static esp_err_t http_server_send_status_error(httpd_req_t* req,
                                        int status_code,
@@ -269,6 +254,35 @@ esp_err_t http_server_close_async_connection(http_request_t *req){
     return ret;
 
 }
+
+static esp_err_t http_server_send_chunked_response(http_request_t* req, const char* data) {
+    if (!req) return ESP_ERR_INVALID_ARG;
+
+    async_slot_t* asyn_request = (async_slot_t*)req;
+    httpd_req_t* request = asyn_request->req;
+
+    //If first response chunk, set headers
+    if(asyn_request->response_started==false){
+        httpd_resp_set_type(request, "text/plain");
+        httpd_resp_set_hdr(request, "Cache-Control", "no-cache");
+        httpd_resp_set_hdr(request, "Connection", "close");
+        asyn_request->response_started=true;
+    }
+    
+    //If last chunk, then end response and close connection
+    if(data==NULL){
+        //End chunked response
+        httpd_resp_send_chunk(request, NULL, 0);
+        http_server_close_async_connection(req);
+        return ESP_OK;
+    }
+    //otherwise send chunk
+    httpd_resp_send_chunk(request, data, HTTPD_RESP_USE_STRLEN);
+
+    
+    return ESP_OK;
+}
+
 
 
 static esp_err_t master_request_handler(httpd_req_t *req){
@@ -358,6 +372,8 @@ esp_err_t http_server_init(http_server_config_t* config){
     http_server.interface.send_response=http_server_send_response;
     http_server.interface.send_error_response=http_server_send_error;
     http_server.interface.close_async_connection=http_server_close_async_connection;
+    http_server.interface.send_chunked_response=http_server_send_chunked_response; 
+    
 
     ESP_LOGI(TAG, "Starting HTTP Server");
     if( httpd_start(&http_server.server_handle, &http_config) != ESP_OK){

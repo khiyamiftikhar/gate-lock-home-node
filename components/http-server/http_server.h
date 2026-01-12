@@ -25,6 +25,8 @@ typedef struct {
     //When it is desired to reply with a text
     esp_err_t (*send_response)(http_request_t* req,const char* buff);
     //When it is desired to reply with error. Right now only error is "Uri not found etc"
+    esp_err_t (*send_chunked_response)(http_request_t* req,const char* data);
+    
     esp_err_t (*send_error_response)(http_request_t* req,const char* message);
 
     esp_err_t (*close_async_connection)(http_request_t* req);
