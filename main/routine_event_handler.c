@@ -47,20 +47,27 @@ static void delegated_to_task_send_log(void *arg, size_t len){
     log_snapshot_t snap={0};
     char buffer[256];       //Same as the temp buffer in log_capture.c, not neat, need to have some consistent way later
     size_t bytes_read;
+    esp_err_t ret=0;
 
     log_snapshot_take(&snap);
     uint8_t count=0;
+    void* ctx= *(void**)arg;
+    ESP_LOGI(TAG,"sending log data in chunks , ctc %p,", ctx);
     
     do{
         bytes_read=log_snapshot_read(&snap,buffer,sizeof(buffer)-1);
         if(bytes_read>0){
             buffer[bytes_read]='\0';   //null terminate
-            user_request_response_send_log(buffer,bytes_read,arg);
-            ESP_LOGI(TAG,"log chunk %d, length %d",count++,bytes_read);            
+            ret=user_request_response_send_log(buffer,bytes_read,ctx);
+
+            if(ret!=ESP_OK){
+                ESP_LOGE(TAG,"failed to send log chunk");
+                return;
+            }
         }
         else{
             ESP_LOGI(TAG,"no more log data");
-            user_request_response_send_log(NULL,0,arg);
+            user_request_response_send_log(NULL,0,ctx);
         }
     }while(bytes_read>0);
 
@@ -194,7 +201,7 @@ static void routine_user_request_events_handler (void *handler_arg,
                 break;
         case USER_REQUEST_ROUTINE_EVENT_USER_COMMAND_LOG:
 
-           delegate_post(delegated_to_task_send_log,(void*)ctx,sizeof(void*));
+           delegate_post(delegated_to_task_send_log,&ctx,sizeof(void*));
 
                 
 
