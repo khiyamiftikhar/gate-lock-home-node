@@ -36,11 +36,11 @@ esp_err_t user_request_response_send_log(char* log_data,size_t length,void* cont
     //    return ESP_FAIL;
     //}
 
-    user_interaction.server_interface->send_chunked_response(req,log_data);
+    return user_interaction.server_interface->send_chunked_response(req,log_data);
     //Close connection
-    
+        
 
-    return ESP_OK;
+    //return ESP_OK;
 }   
 
 esp_err_t user_request_response_inform_command_status(bool success,void* context){  
