@@ -20,9 +20,14 @@ typedef struct {
 #define MAX_ASYNC_REQUESTS 4
 
 typedef struct {
-    httpd_req_t *req;   // pointer to async request
+    httpd_req_t *req;
     bool response_started;
     bool in_use;
+
+    // --- send state ---
+    const char *pending_data;
+    size_t pending_len;
+    bool pending_last;
 } async_slot_t;
 
 // Global pool
@@ -69,7 +74,7 @@ static async_slot_t* async_slot_allocate(httpd_req_t *req)
             async_pool[i].req = req;
             async_pool[i].in_use = true;
             slot = &async_pool[i];
-            ESP_LOGI(TAG, "Allocated slot %d for req %p", i, req);
+            ESP_LOGI(TAG, "Allocated slot %d and pointer %p for req %p", i, slot, req);
             break;
         }
     }
@@ -255,31 +260,58 @@ esp_err_t http_server_close_async_connection(http_request_t *req){
 
 }
 
-static esp_err_t http_server_send_chunked_response(http_request_t* req, const char* data) {
-    if (!req) return ESP_ERR_INVALID_ARG;
 
-    async_slot_t* asyn_request = (async_slot_t*)req;
-    httpd_req_t* request = asyn_request->req;
+static void http_async_send_worker(void *arg)
+{
+    async_slot_t *slot = (async_slot_t *)arg;
+    httpd_req_t *req = slot->req;
 
-    //If first response chunk, set headers
-    if(asyn_request->response_started==false){
-        httpd_resp_set_type(request, "text/plain");
-        httpd_resp_set_hdr(request, "Cache-Control", "no-cache");
-        httpd_resp_set_hdr(request, "Connection", "close");
-        asyn_request->response_started=true;
+    if (!slot->response_started) {
+        httpd_resp_set_type(req, "text/plain");
+        httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+        httpd_resp_set_hdr(req, "Connection", "close");
+        slot->response_started = true;
     }
-    
-    //If last chunk, then end response and close connection
-    if(data==NULL){
-        //End chunked response
-        httpd_resp_send_chunk(request, NULL, 0);
-        http_server_close_async_connection(req);
-        return ESP_OK;
-    }
-    //otherwise send chunk
-    httpd_resp_send_chunk(request, data, HTTPD_RESP_USE_STRLEN);
 
-    
+    if (slot->pending_last) {
+        httpd_resp_send_chunk(req, NULL, 0);
+        http_server_close_async_connection((http_request_t *)slot);
+        slot->in_use = false;
+        return;
+    }
+
+    // Best effort: ignore EAGAIN here
+    httpd_resp_send_chunk(req,
+                           slot->pending_data,
+                           HTTPD_RESP_USE_STRLEN);
+}
+
+static esp_err_t http_server_send_chunked_response(http_request_t *req,
+                                            const char *data)
+{
+    async_slot_t *slot = (async_slot_t *)req;
+    ESP_LOGI(TAG, "Sending chunked response: %p", slot);
+
+    if (!slot ){
+        ESP_LOGI(TAG, "Invalid async slot");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (slot->in_use == false) {
+        ESP_LOGI(TAG, "Invalid status of slot");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    // Populate send state
+    slot->pending_data = data;
+//    slot->pending_len  = len;
+    slot->pending_last = (data == NULL);
+
+    // Ask HTTP server task to send
+    httpd_queue_work(http_server.server_handle,
+                     http_async_send_worker,
+                     slot);
+
     return ESP_OK;
 }
 
