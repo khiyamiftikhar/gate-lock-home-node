@@ -23,6 +23,7 @@ typedef struct {
     httpd_req_t *req;
     bool response_started;
     bool in_use;
+    bool close_requested;
 
     // --- send state ---
     const char *pending_data;
@@ -73,6 +74,8 @@ static async_slot_t* async_slot_allocate(httpd_req_t *req)
         if (!async_pool[i].in_use) {
             async_pool[i].req = req;
             async_pool[i].in_use = true;
+            async_pool[i].close_requested = false;
+            async_pool[i].response_started=false;
             slot = &async_pool[i];
             ESP_LOGI(TAG, "Allocated slot %d and pointer %p for req %p", i, slot, req);
             break;
@@ -260,6 +263,19 @@ esp_err_t http_server_close_async_connection(http_request_t *req){
 
 }
 
+static void http_async_close_worker(void *arg)
+{
+    async_slot_t *slot = arg;
+
+    ESP_LOGI(TAG, "Closing worker: %p", slot);
+    if (!slot->in_use || !slot->close_requested) {
+        return;
+    }
+
+    http_server_close_async_connection((http_request_t *)slot);
+    slot->in_use = false;
+}
+
 
 static void http_async_send_worker(void *arg)
 {
@@ -274,9 +290,17 @@ static void http_async_send_worker(void *arg)
     }
 
     if (slot->pending_last) {
+
+        ESP_LOGI(TAG, "Finalizing chunked response");
         httpd_resp_send_chunk(req, NULL, 0);
-        http_server_close_async_connection((http_request_t *)slot);
-        slot->in_use = false;
+        slot->close_requested = true;
+        //slot->in_use = false;
+        // Schedule cleanup AFTER all HTTP internals unwind
+        httpd_queue_work(http_server.server_handle,
+                         http_async_close_worker,
+                         slot);
+        //http_server_close_async_connection((http_request_t *)slot);
+        
         return;
     }
 
@@ -306,6 +330,8 @@ static esp_err_t http_server_send_chunked_response(http_request_t *req,
     slot->pending_data = data;
 //    slot->pending_len  = len;
     slot->pending_last = (data == NULL);
+
+    ESP_LOGI(TAG, "Queueing chunked response send, last=%d", slot->pending_last);
 
     // Ask HTTP server task to send
     httpd_queue_work(http_server.server_handle,
