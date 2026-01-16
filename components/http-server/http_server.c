@@ -9,6 +9,24 @@
 #define         MAX_URIS                    5
 #define         MAX_URI_LENGTH              15
 
+#define LOG_CHUNK_SIZE   256
+#define LOG_CHUNK_POOL   4   // tune as needed
+
+typedef struct {
+    bool in_use;
+    bool is_last;
+    size_t len;
+    char data[LOG_CHUNK_SIZE];
+} http_chunk_t;
+
+typedef struct {
+    http_chunk_t chunks[LOG_CHUNK_POOL];
+    SemaphoreHandle_t mutex;
+} http_chunk_pool_t;
+
+static http_chunk_pool_t g_chunk_pool;
+
+
 typedef struct {
     char uri[MAX_URI_LENGTH];           // Points to user's string literal
     request_callback callback;
@@ -101,6 +119,33 @@ static void async_slot_free(httpd_req_t *req)
     }
     xSemaphoreGive(http_server.pool_mutex);
 }
+
+static http_chunk_t *chunk_alloc(void)
+{
+    if (xSemaphoreTake(g_chunk_pool.mutex, 0) != pdTRUE) {
+        return NULL;
+    }
+
+    for (int i = 0; i < LOG_CHUNK_POOL; i++) {
+        if (!g_chunk_pool.chunks[i].in_use) {
+            g_chunk_pool.chunks[i].in_use = true;
+            xSemaphoreGive(g_chunk_pool.mutex);
+            return &g_chunk_pool.chunks[i];
+        }
+    }
+
+    xSemaphoreGive(g_chunk_pool.mutex);
+    return NULL;
+}
+
+static void chunk_free(http_chunk_t *chunk)
+{
+    xSemaphoreTake(g_chunk_pool.mutex, portMAX_DELAY);
+    chunk->in_use = false;
+    xSemaphoreGive(g_chunk_pool.mutex);
+}
+
+
 
 
 static esp_err_t http_server_send_response(http_request_t* req, const char* data) {
@@ -445,6 +490,14 @@ esp_err_t http_server_init(http_server_config_t* config){
     for (int i = 0; i < MAX_ASYNC_REQUESTS; i++) {
         async_pool[i].req = NULL;
         async_pool[i].in_use = false;
+    }
+
+
+    g_chunk_pool.mutex = xSemaphoreCreateMutex();
+    assert(g_chunk_pool.mutex);
+
+    for (int i = 0; i < LOG_CHUNK_POOL; i++) {
+        g_chunk_pool.chunks[i].in_use = false;
     }
 
     return ESP_OK;
