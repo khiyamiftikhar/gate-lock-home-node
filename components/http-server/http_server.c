@@ -4,28 +4,21 @@
 #include <string.h>
 #include <esp_log.h>
 #include <esp_http_server.h>
+#include "bank_pool.h"  
 #include "http_server.h"
 
 #define         MAX_URIS                    5
 #define         MAX_URI_LENGTH              15
 
 #define LOG_CHUNK_SIZE   256
-#define LOG_CHUNK_POOL   4   // tune as needed
+
+
 
 typedef struct {
-    bool in_use;
-    bool is_last;
+    bool   is_last;
     size_t len;
-    char data[LOG_CHUNK_SIZE];
+    char   data[LOG_CHUNK_SIZE];
 } http_chunk_t;
-
-typedef struct {
-    http_chunk_t chunks[LOG_CHUNK_POOL];
-    SemaphoreHandle_t mutex;
-} http_chunk_pool_t;
-
-static http_chunk_pool_t g_chunk_pool;
-
 
 typedef struct {
     char uri[MAX_URI_LENGTH];           // Points to user's string literal
@@ -35,23 +28,33 @@ typedef struct {
 
 
 // Static pool
+
 #define MAX_ASYNC_REQUESTS 4
 
 typedef struct {
     httpd_req_t *req;
     bool response_started;
-    bool in_use;
-    bool close_requested;
-
-    // --- send state ---
-    const char *pending_data;
-    size_t pending_len;
-    bool pending_last;
 } async_slot_t;
 
-// Global pool
-static async_slot_t async_pool[MAX_ASYNC_REQUESTS];
 
+typedef struct {
+    async_slot_t *slot;
+    http_chunk_t *chunk;
+} http_send_job_t;
+
+
+#define LOG_CHUNK_POOL     4
+#define MAX_ASYNC_REQUESTS 4
+#define SEND_JOB_POOL      4   // usually same as chunk pool
+
+static http_chunk_t    g_chunk_objs[LOG_CHUNK_POOL];
+static bank_pool_handle_t g_chunk_bank;
+
+static async_slot_t    g_async_objs[MAX_ASYNC_REQUESTS];
+static bank_pool_handle_t g_async_bank;
+
+static http_send_job_t g_job_objs[SEND_JOB_POOL];
+static bank_pool_handle_t g_job_bank;
 
 //This is to encapsulate the httpd_req_t type so that esp_http_server is in PRIV_REQUIRES
 //struct http_request {
@@ -84,6 +87,7 @@ static const char *TAG = "HTTP Server";
     } while (0)
 
 
+/*
 static async_slot_t* async_slot_allocate(httpd_req_t *req)
 {
     xSemaphoreTake(http_server.pool_mutex, portMAX_DELAY);
@@ -146,7 +150,7 @@ static void chunk_free(http_chunk_t *chunk)
 }
 
 
-
+*/
 
 static esp_err_t http_server_send_response(http_request_t* req, const char* data) {
     if (!req || !data) return ESP_ERR_INVALID_ARG;
@@ -298,16 +302,18 @@ esp_err_t http_server_close_async_connection(http_request_t *req){
     httpd_req_t* request=asyn_request->req;
     
 
-    ESP_LOGI(TAG, "Completing async request: %p", asyn_request);
+    ESP_LOGI(TAG, "Completing async request: %p, for req , %p", asyn_request, asyn_request->req);
+
     esp_err_t res = httpd_req_async_handler_complete(request);
     ESP_LOGI(TAG, "Complete result: %s", esp_err_to_name(res));
 
 
-    async_slot_free(asyn_request->req);
+    bank_free(g_async_bank, (void*)asyn_request);
     return ret;
 
 }
 
+/*
 static void http_async_close_worker(void *arg)
 {
     async_slot_t *slot = arg;
@@ -320,11 +326,13 @@ static void http_async_close_worker(void *arg)
     http_server_close_async_connection((http_request_t *)slot);
     slot->in_use = false;
 }
-
+*/
 
 static void http_async_send_worker(void *arg)
 {
-    async_slot_t *slot = (async_slot_t *)arg;
+    http_send_job_t *job = arg;
+    async_slot_t *slot = job->slot;
+    http_chunk_t *chunk = job->chunk;
     httpd_req_t *req = slot->req;
 
     if (!slot->response_started) {
@@ -334,54 +342,57 @@ static void http_async_send_worker(void *arg)
         slot->response_started = true;
     }
 
-    if (slot->pending_last) {
-
-        ESP_LOGI(TAG, "Finalizing chunked response");
+    if (chunk->is_last) {
         httpd_resp_send_chunk(req, NULL, 0);
-        slot->close_requested = true;
-        //slot->in_use = false;
-        // Schedule cleanup AFTER all HTTP internals unwind
-        httpd_queue_work(http_server.server_handle,
-                         http_async_close_worker,
-                         slot);
-        //http_server_close_async_connection((http_request_t *)slot);
-        
+        http_server_close_async_connection((http_request_t *)slot);
+
+        bank_free(g_chunk_bank, chunk);
+        //bank_free(g_async_bank, slot);
+        bank_free(g_job_bank, job);
         return;
     }
 
-    // Best effort: ignore EAGAIN here
-    httpd_resp_send_chunk(req,
-                           slot->pending_data,
-                           HTTPD_RESP_USE_STRLEN);
+    httpd_resp_send_chunk(req, chunk->data, chunk->len);
+
+    bank_free(g_chunk_bank, chunk);
+    bank_free(g_job_bank, job);
 }
 
-static esp_err_t http_server_send_chunked_response(http_request_t *req,
+
+esp_err_t http_server_send_chunked_response(http_request_t *req,
                                             const char *data)
 {
     async_slot_t *slot = (async_slot_t *)req;
-    ESP_LOGI(TAG, "Sending chunked response: %p", slot);
 
-    if (!slot ){
-        ESP_LOGI(TAG, "Invalid async slot");
-        return ESP_ERR_INVALID_STATE;
+    
+    http_chunk_t *chunk = bank_alloc(g_chunk_bank);
+    if (!chunk) {
+        ESP_LOGE(TAG, "Failed to allocate chunk");
+        return ESP_OK;   // best effort
     }
 
-    if (slot->in_use == false) {
-        ESP_LOGI(TAG, "Invalid status of slot");
-        return ESP_ERR_INVALID_STATE;
+    http_send_job_t *job = bank_alloc(g_job_bank);
+    if (!job) {
+        ESP_LOGE(TAG, "Failed to allocate send job");
+        bank_free(g_chunk_bank, chunk);
+        return ESP_OK;   // best effort
     }
 
-    // Populate send state
-    slot->pending_data = data;
-//    slot->pending_len  = len;
-    slot->pending_last = (data == NULL);
+    if (data) {
+        strncpy(chunk->data, data, LOG_CHUNK_SIZE);
+        chunk->len = strnlen(chunk->data, LOG_CHUNK_SIZE);
+        chunk->is_last = false;
+    } else {
+        chunk->len = 0;
+        chunk->is_last = true;
+    }
 
-    ESP_LOGI(TAG, "Queueing chunked response send, last=%d", slot->pending_last);
+    job->slot  = slot;
+    job->chunk = chunk;
 
-    // Ask HTTP server task to send
     httpd_queue_work(http_server.server_handle,
                      http_async_send_worker,
-                     slot);
+                     job);
 
     return ESP_OK;
 }
@@ -405,7 +416,9 @@ static esp_err_t master_request_handler(httpd_req_t *req){
 
 
             httpd_req_async_handler_begin(req, &async_req);
-            async_slot_t* async_slot = async_slot_allocate(async_req);
+            async_slot_t* async_slot =(async_slot_t*) bank_alloc(g_async_bank);
+            
+            ESP_LOGI(TAG, "Allocated async slot %p for req %p", async_slot, req);
             if(async_slot==NULL){
                 http_server_send_status_error(req,
                                        503,
@@ -414,8 +427,8 @@ static esp_err_t master_request_handler(httpd_req_t *req){
                 return ESP_OK;
             }
             
-            
-
+            async_slot->req=async_req;
+            //call the corresponding callback registered by the user_request 
             http_server.uri_record[i].callback((http_request_t*)async_slot, async_req->uri);
             return ESP_OK;
         }
@@ -487,18 +500,23 @@ esp_err_t http_server_init(http_server_config_t* config){
     }
 
     http_server.pool_mutex = xSemaphoreCreateMutex();
-    for (int i = 0; i < MAX_ASYNC_REQUESTS; i++) {
-        async_pool[i].req = NULL;
-        async_pool[i].in_use = false;
-    }
 
+    bank_register_pool(&g_chunk_bank,
+                       g_chunk_objs,
+                       sizeof(http_chunk_t),
+                       LOG_CHUNK_POOL
+                       );
 
-    g_chunk_pool.mutex = xSemaphoreCreateMutex();
-    assert(g_chunk_pool.mutex);
+    bank_register_pool(&g_async_bank,
+                       g_async_objs,
+                       sizeof(async_slot_t),
+                       MAX_ASYNC_REQUESTS);
 
-    for (int i = 0; i < LOG_CHUNK_POOL; i++) {
-        g_chunk_pool.chunks[i].in_use = false;
-    }
+    bank_register_pool(&g_job_bank,
+                       g_job_objs,
+                       sizeof(http_send_job_t),
+                       SEND_JOB_POOL);
+
 
     return ESP_OK;
 }

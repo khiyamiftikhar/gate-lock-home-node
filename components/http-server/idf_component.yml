@@ -1,0 +1,3 @@
+dependencies:
+  bank-pool:
+    git: https://github.com/khiyamiftikhar/bank-pool
