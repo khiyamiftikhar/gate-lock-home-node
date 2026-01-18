@@ -313,26 +313,23 @@ esp_err_t http_server_close_async_connection(http_request_t *req){
 
 }
 
-/*
 static void http_async_close_worker(void *arg)
 {
     async_slot_t *slot = arg;
+    httpd_req_t *req = slot->req;
 
-    ESP_LOGI(TAG, "Closing worker: %p", slot);
-    if (!slot->in_use || !slot->close_requested) {
-        return;
-    }
-
+    // Must run after all data workers
+    httpd_resp_send_chunk(req, NULL, 0);
     http_server_close_async_connection((http_request_t *)slot);
-    slot->in_use = false;
-}
-*/
 
-static void http_async_send_worker(void *arg)
+
+}
+
+
+static void http_async_data_worker(void *arg)
 {
     http_send_job_t *job = arg;
     async_slot_t *slot = job->slot;
-    http_chunk_t *chunk = job->chunk;
     httpd_req_t *req = slot->req;
 
     if (!slot->response_started) {
@@ -342,19 +339,11 @@ static void http_async_send_worker(void *arg)
         slot->response_started = true;
     }
 
-    if (chunk->is_last) {
-        httpd_resp_send_chunk(req, NULL, 0);
-        http_server_close_async_connection((http_request_t *)slot);
+    httpd_resp_send_chunk(req,
+                           job->chunk->data,
+                           job->chunk->len);
 
-        bank_free(g_chunk_bank, chunk);
-        //bank_free(g_async_bank, slot);
-        bank_free(g_job_bank, job);
-        return;
-    }
-
-    httpd_resp_send_chunk(req, chunk->data, chunk->len);
-
-    bank_free(g_chunk_bank, chunk);
+    bank_free(g_chunk_bank, job->chunk);
     bank_free(g_job_bank, job);
 }
 
@@ -364,35 +353,38 @@ esp_err_t http_server_send_chunked_response(http_request_t *req,
 {
     async_slot_t *slot = (async_slot_t *)req;
 
-    
-    http_chunk_t *chunk = bank_alloc(g_chunk_bank);
-    if (!chunk) {
-        ESP_LOGE(TAG, "Failed to allocate chunk");
-        return ESP_OK;   // best effort
-    }
-
-    http_send_job_t *job = bank_alloc(g_job_bank);
-    if (!job) {
-        ESP_LOGE(TAG, "Failed to allocate send job");
-        bank_free(g_chunk_bank, chunk);
-        return ESP_OK;   // best effort
-    }
-
+    // -------- DATA --------
     if (data) {
+        http_chunk_t *chunk = bank_alloc(g_chunk_bank);
+        http_send_job_t *job = bank_alloc(g_job_bank);
+
+        if (!chunk || !job) {
+            ESP_LOGI(TAG, "Failed to allocate chunk or job");
+            if (chunk) bank_free(g_chunk_bank, chunk);
+            if (job)   bank_free(g_job_bank, job);
+            return ESP_OK;   // best effort
+        }
+
         strncpy(chunk->data, data, LOG_CHUNK_SIZE);
         chunk->len = strnlen(chunk->data, LOG_CHUNK_SIZE);
-        chunk->is_last = false;
-    } else {
-        chunk->len = 0;
-        chunk->is_last = true;
+
+        job->slot  = slot;
+        job->chunk = chunk;
+
+        httpd_queue_work(http_server.server_handle,
+                         http_async_data_worker,
+                         job);
+        return ESP_OK;
     }
 
-    job->slot  = slot;
-    job->chunk = chunk;
-
+    // -------- END --------
+    /*
+     * No allocation.
+     * Order preserved because this is queued AFTER all data jobs.
+     */
     httpd_queue_work(http_server.server_handle,
-                     http_async_send_worker,
-                     job);
+                     http_async_close_worker,
+                     slot);
 
     return ESP_OK;
 }
