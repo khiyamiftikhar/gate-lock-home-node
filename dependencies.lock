@@ -1,0 +1,203 @@
+dependencies:
+  bank-pool:
+    component_hash: 
+      da75fcac8cf46dd3d6095ce643e69903916c5a6401856386d84a357a7288938d
+    dependencies: []
+    source:
+      git: https://github.com/khiyamiftikhar/bank-pool
+      path: .
+      type: git
+    version: a9fd3257b079d24dd2e23c5e9dbcdd73cf46d522
+  database-interface:
+    component_hash: 
+      685a9897bca85c6a91973ddb27ea17db2395945b097d30f84bfcdda4f91cc8ab
+    dependencies: []
+    source:
+      git: https://github.com/khiyamiftikhar/espnow-components
+      path: database-interface
+      type: git
+    version: bd83657a3390876fc04635e21a8a927d3d16bf33
+  discovery-interface:
+    component_hash: 
+      465533856258219ab8275f433bba0899037fa66e461b28d045d3af17211b351c
+    dependencies: []
+    source:
+      git: https://github.com/khiyamiftikhar/espnow-components
+      path: discovery-interface
+      type: git
+    version: bd83657a3390876fc04635e21a8a927d3d16bf33
+  discovery_service:
+    component_hash: 
+      8d8e86db35de172c6b735d6055ab8ef6595cf11c92ce699e4be518f37acc8b5a
+    dependencies:
+    - git: https://github.com/khiyamiftikhar/event-adapter
+      name: event-adapter
+    - git: https://github.com/khiyamiftikhar/espnow-components
+      name: peer-manager-interface
+      path: peer-manager-interface
+    - git: https://github.com/khiyamiftikhar/espnow-components
+      name: database-interface
+      path: database-interface
+    - git: https://github.com/khiyamiftikhar/espnow-components
+      name: discovery-interface
+      path: discovery-interface
+    source:
+      git: https://github.com/khiyamiftikhar/espnow-components
+      path: discovery_service
+      type: git
+    version: bd83657a3390876fc04635e21a8a927d3d16bf33
+  esp-now-comm:
+    component_hash: 
+      495bc95160dae9f02313e6dfaa84159e86e31e899b66f687d9917c2fb2227c6f
+    dependencies:
+    - git: https://github.com/khiyamiftikhar/espnow-components
+      name: peer-manager-interface
+      path: peer-manager-interface
+    - git: https://github.com/khiyamiftikhar/espnow-components
+      name: database-interface
+      path: database-interface
+    - git: https://github.com/khiyamiftikhar/espnow-components
+      name: message-interface
+      path: message-interface
+    source:
+      git: https://github.com/khiyamiftikhar/espnow-components
+      path: esp-now-comm
+      type: git
+    version: bd83657a3390876fc04635e21a8a927d3d16bf33
+  espressif/esp_lvgl_port:
+    component_hash: 
+      f872401524cb645ee6ff1c9242d44fb4ddcfd4d37d7be8b9ed3f4e85a404efcd
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.1'
+    - name: lvgl/lvgl
+      registry_url: https://components.espressif.com
+      require: public
+      version: '>=8,<10'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 2.7.0
+  espressif/mdns:
+    component_hash: 
+      29e47564b1a7ee778135e17fbbf2a2773f71c97ebabfe626c8eda7c958a7ad16
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.9.1
+  event-adapter:
+    component_hash: 
+      09c0f200f9887c37fdfb457a711454505cd482087c542e984e8111b4beefeb1d
+    dependencies: []
+    source:
+      git: https://github.com/khiyamiftikhar/event-adapter
+      path: .
+      type: git
+    version: 2fffd440a3addbe1184246d608d33838f6745a6e
+  idf:
+    source:
+      type: idf
+    version: 5.5.2
+  log-capture:
+    component_hash: 
+      f2e7b006515a20048ce3011499a9d3cc7ef1f232af40aa568d59f9d1ff38afc7
+    dependencies: []
+    source:
+      git: https://github.com/khiyamiftikhar/log-capture
+      path: .
+      type: git
+    version: 7953d2efba0fe1ce3b8298bf9b745bab4924a792
+  lvgl/lvgl:
+    component_hash: 
+      17e68bfd21f0edf4c3ee838e2273da840bf3930e5dbc3bfa6c1190c3aed41f9f
+    dependencies: []
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 9.4.0
+  message-interface:
+    component_hash: 
+      30506824a0f928e9e68288ffecfb23e21db5c581eaeab12b04a9e9be5cb0b5e6
+    dependencies: []
+    source:
+      git: https://github.com/khiyamiftikhar/espnow-components
+      path: message-interface
+      type: git
+    version: bd83657a3390876fc04635e21a8a927d3d16bf33
+  message_service:
+    component_hash: 
+      30bc290ee20554688ed1f84407bad8796f18bf4e88a7bfc4d26acc1aa75883f2
+    dependencies:
+    - git: https://github.com/khiyamiftikhar/event-adapter
+      name: event-adapter
+    - git: https://github.com/khiyamiftikhar/espnow-components
+      name: database-interface
+      path: database-interface
+    - git: https://github.com/khiyamiftikhar/espnow-components
+      name: message-interface
+      path: message-interface
+    source:
+      git: https://github.com/khiyamiftikhar/espnow-components
+      path: message_service
+      type: git
+    version: bd83657a3390876fc04635e21a8a927d3d16bf33
+  peer-manager-interface:
+    component_hash: 
+      80d539cd6f12f816df157e312f19a47641054b6c2f910219fc5308f7cc7f6540
+    dependencies: []
+    source:
+      git: https://github.com/khiyamiftikhar/espnow-components
+      path: peer-manager-interface
+      type: git
+    version: bd83657a3390876fc04635e21a8a927d3d16bf33
+  peer-registry:
+    component_hash: 
+      ad2bf7db74a06aa79a718e19539b7eafa6c5bfbcbf3c7fd3069d15b33c606883
+    dependencies: []
+    source:
+      git: https://github.com/khiyamiftikhar/espnow-components
+      path: peer-registry
+      type: git
+    version: bd83657a3390876fc04635e21a8a927d3d16bf33
+  sync-manager:
+    component_hash: 
+      9c9150729bf33dc087c3828f36fac2db75202d94ba1abeeaaf7c6847aebf4d12
+    dependencies: []
+    source:
+      git: https://github.com/khiyamiftikhar/sync-manager
+      path: .
+      type: git
+    version: 61a8f29c55c6d17c53d57bf2eab78e44969dc551
+  wifi-smartconfig:
+    component_hash: 
+      14ca4e6f1b1d1839d3610a314fc66ff9a9ebe8b1209b323a0eb0defb0d08b33f
+    dependencies: []
+    source:
+      git: https://github.com/khiyamiftikhar/wifi-smartconfig
+      path: .
+      type: git
+    version: c1f99650ed8a16af69ad0967cc829015e6cc7702
+direct_dependencies:
+- bank-pool
+- database-interface
+- discovery-interface
+- discovery_service
+- esp-now-comm
+- espressif/esp_lvgl_port
+- espressif/mdns
+- event-adapter
+- log-capture
+- lvgl/lvgl
+- message_service
+- peer-manager-interface
+- peer-registry
+- sync-manager
+- wifi-smartconfig
+manifest_hash: f4823c8b31a138bad0b73fcbb36f09197934f10850cd47f8dbf27707a3e683f0
+target: esp32c3
+version: 2.0.0
