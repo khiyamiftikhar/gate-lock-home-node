@@ -331,6 +331,7 @@ static void http_async_close_worker(void *arg)
     httpd_req_t *req = slot->req;
 
     ESP_LOGI(TAG, "HTTP CLOSE WORKER: sending final chunk");
+    ESP_LOGI(TAG, "close worker slot %p for req %p", slot, slot->req);
 
     httpd_resp_send_chunk(req, NULL, 0);
 
@@ -383,7 +384,7 @@ esp_err_t http_server_send_chunked_response(http_request_t *req,
         http_send_job_t *job = bank_alloc(g_job_bank);
 
         if (!chunk || !job) {
-            ESP_LOGI(TAG, "Failed to allocate chunk or job");
+            //ESP_LOGI(TAG, "Failed to allocate chunk or job");
             if (chunk) bank_free(g_chunk_bank, chunk);
             if (job)   bank_free(g_job_bank, job);
             return ESP_OK;   // best effort
@@ -435,7 +436,7 @@ static esp_err_t master_request_handler(httpd_req_t *req){
             async_slot_t* async_slot =(async_slot_t*) bank_alloc(g_async_bank);
             async_slot->response_started=false;
             
-            ESP_LOGI(TAG, "Allocated async slot %p for req %p", async_slot, req);
+            
             if(async_slot==NULL){
                 http_server_send_status_error(req,
                                        503,
@@ -444,7 +445,10 @@ static esp_err_t master_request_handler(httpd_req_t *req){
                 return ESP_OK;
             }
             
+            
             async_slot->req=async_req;
+            ESP_LOGI(TAG, "Allocated async slot %p for req %p", async_slot, async_slot->req);
+
             //call the corresponding callback registered by the user_request 
             http_server.uri_record[i].callback((http_request_t*)async_slot, async_req->uri);
             return ESP_OK;
