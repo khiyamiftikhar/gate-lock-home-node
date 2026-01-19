@@ -11,6 +11,8 @@
 /// @brief Inform whether request was sent successfully using espnow
 /// @param success 
 /// @return 
+
+esp_err_t user_request_response_send_log(char* log_data,size_t length,void* context);
 esp_err_t user_request_response_inform_command_status(bool success,void* context);
 esp_err_t user_request_response_create();
 

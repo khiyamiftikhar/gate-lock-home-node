@@ -13,6 +13,7 @@
 #include "user_request.h"
 #include "smartconfig.h"
 #include "sync_manager.h"
+#include "log_capture.h"
 
 
 //static const uint8_t gate_node_mac[]={0xe4,0x65,0xb8,0x1b,0x1c,0xd8};
@@ -39,8 +40,44 @@ static TaskHandle_t delegate_task_handle=NULL;
 
 
 
+///This function handles sending log data in chunks
+///It was delegated by the event handler to the task context
+
+static void delegated_to_task_send_log(void *arg, size_t len){
+    log_snapshot_t snap={0};
+    char buffer[256];       //Same as the temp buffer in log_capture.c, not neat, need to have some consistent way later
+    size_t bytes_read;
+    esp_err_t ret=0;
+
+    log_snapshot_take(&snap);
+    uint8_t count=0;
+    void* ctx= *(void**)arg;
+    ESP_LOGI(TAG,"sending log data in chunks , ctc %p,", ctx);
+    
+    do{
+        bytes_read=log_snapshot_read(&snap,buffer,sizeof(buffer)-1);
+        //ESP_LOGI(TAG,"bytes read %d",bytes_read);
+        if(bytes_read>0){
+            buffer[bytes_read]='\0';   //null terminate
+            ret=user_request_response_send_log(buffer,bytes_read,ctx);
+
+            if(ret!=ESP_OK){
+                ESP_LOGE(TAG,"failed to send log chunk");
+                return;
+            }
+        }
+        else{
+            ESP_LOGI(TAG,"no more log data");
+            user_request_response_send_log(NULL,0,ctx);
+        }
+    }while(bytes_read>0);
+
+}
 
 
+
+/// @brief This task runs delegated functions posted to the delegate queue.
+/// @param arg 
 static void delegate_run_task(void *arg) {
     delegate_job_t job;
     while (1) {
@@ -50,7 +87,12 @@ static void delegate_run_task(void *arg) {
     }
 }
 
-
+/// @brief The tasks that are blocking or interative cannot be run directly in event handler context.
+/// This method delegates such tasks to a separate task via a queue.   
+/// @param func 
+/// @param arg 
+/// @param len 
+/// @return 
 static esp_err_t delegate_post(delegate_func_t func, const void *arg, size_t len) {
     if (len > DELEGATE_ARG_MAX_SIZE) {
         ESP_LOGE("DELEGATE", "Argument too large (%d > %d)", len, DELEGATE_ARG_MAX_SIZE);
@@ -158,6 +200,12 @@ static void routine_user_request_events_handler (void *handler_arg,
         case USER_REQUEST_ROUTINE_EVENT_USER_COMMAND_GATE_STATUS:
                 ret=message_codec_send_command(gate_node_mac,MESSAGE_COMMAND_LOCK_STATUS,ctx);
                 break;
+        case USER_REQUEST_ROUTINE_EVENT_USER_COMMAND_LOG:
+
+           delegate_post(delegated_to_task_send_log,&ctx,sizeof(void*));
+
+                
+
 
         default:
             break;
@@ -254,7 +302,7 @@ esp_err_t routine_handler_init(){
         BaseType_t res = xTaskCreatePinnedToCore(
             delegate_run_task,
             "run delegated tasks",
-            2048,        // stack size
+            4096,        // stack size
             NULL,
             5,             // priority
             &delegate_task_handle,
