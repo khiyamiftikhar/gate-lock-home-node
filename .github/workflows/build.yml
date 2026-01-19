@@ -83,7 +83,7 @@ jobs:
           esp_idf_version: v5.5.2
           target: ${{ matrix.target }}
           path: .  # your project root
-          command: idf.py -B build_${{ matrix.target }} -DIDF_TARGET=${{ matrix.target }} -DSDKCONFIG=sdkconfig.${{ matrix.target }} -D SDKCONFIG_DEFAULTS=sdkconfig.defaults build
+          command: idf.py -B build_${{ matrix.target }} -DIDF_TARGET=${{ matrix.target }} -DSDKCONFIG=sdkconfig.${{ matrix.target }} -D SDKCONFIG_DEFAULTS=sdkconfig.defaults build -v
 
       # Archive firmware
       - name: Archive firmware
