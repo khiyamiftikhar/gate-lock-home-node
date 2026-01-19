@@ -3,7 +3,7 @@ on:
   push:
     branches:
       - main
-      - fix/gui-use-remote-lvgl
+      - fix/git-action-max-build-time
     tags:        # ← NEW: Trigger on version tags
       - 'v*'
   pull_request:
@@ -80,7 +80,7 @@ jobs:
       - name: Build ${{ matrix.target }}
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.4.2
+          esp_idf_version: v5.5.2
           target: ${{ matrix.target }}
           path: .  # your project root
           command: idf.py -B build_${{ matrix.target }} -DIDF_TARGET=${{ matrix.target }} -DSDKCONFIG=sdkconfig.${{ matrix.target }} -D SDKCONFIG_DEFAULTS=sdkconfig.defaults build
