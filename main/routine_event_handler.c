@@ -56,6 +56,7 @@ static void delegated_to_task_send_log(void *arg, size_t len){
     
     do{
         bytes_read=log_snapshot_read(&snap,buffer,sizeof(buffer)-1);
+        //ESP_LOGI(TAG,"bytes read %d",bytes_read);
         if(bytes_read>0){
             buffer[bytes_read]='\0';   //null terminate
             ret=user_request_response_send_log(buffer,bytes_read,ctx);
