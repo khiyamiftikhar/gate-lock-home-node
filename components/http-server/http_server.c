@@ -304,8 +304,12 @@ esp_err_t http_server_close_async_connection(http_request_t *req){
 
     ESP_LOGI(TAG, "Completing async request: %p, for req , %p", asyn_request, asyn_request->req);
 
-    esp_err_t res = httpd_req_async_handler_complete(request);
-    ESP_LOGI(TAG, "Complete result: %s", esp_err_to_name(res));
+    if(request){
+        esp_err_t res = httpd_req_async_handler_complete(request);
+        ESP_LOGI(TAG, "Complete result: %s", esp_err_to_name(res));
+    
+    }
+    
 
 
     bank_free(g_async_bank, (void*)asyn_request);
@@ -313,16 +317,36 @@ esp_err_t http_server_close_async_connection(http_request_t *req){
 
 }
 
+static void http_async_finalize_worker(void *arg)
+{
+    async_slot_t *slot = arg;
+
+    ESP_LOGI(TAG, "Finalizing async slot %p for req %p", slot, slot->req);
+    bank_free(g_async_bank, slot);
+}
+
 static void http_async_close_worker(void *arg)
 {
     async_slot_t *slot = arg;
     httpd_req_t *req = slot->req;
 
-    // Must run after all data workers
+    ESP_LOGI(TAG, "HTTP CLOSE WORKER: sending final chunk");
+
     httpd_resp_send_chunk(req, NULL, 0);
-    http_server_close_async_connection((http_request_t *)slot);
+
+    ESP_LOGI(TAG, "HTTP CLOSE WORKER: marking async complete");
+    int sockfd = httpd_req_to_sockfd(req);
 
 
+    httpd_req_async_handler_complete(req);
+
+
+    httpd_sess_trigger_close(http_server.server_handle, sockfd);
+
+    // Defer actual free
+    httpd_queue_work(http_server.server_handle,
+                     http_async_finalize_worker,
+                     slot);
 }
 
 
@@ -409,6 +433,7 @@ static esp_err_t master_request_handler(httpd_req_t *req){
 
             httpd_req_async_handler_begin(req, &async_req);
             async_slot_t* async_slot =(async_slot_t*) bank_alloc(g_async_bank);
+            async_slot->response_started=false;
             
             ESP_LOGI(TAG, "Allocated async slot %p for req %p", async_slot, req);
             if(async_slot==NULL){
