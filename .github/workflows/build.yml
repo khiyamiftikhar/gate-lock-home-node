@@ -89,10 +89,7 @@ jobs:
                   -DIDF_TARGET=${{ matrix.target }}
                   -DSDKCONFIG=sdkconfig.${{ matrix.target }}
                   -DSDKCONFIG_DEFAULTS=sdkconfig.defaults
-                  build
-                  --
-                  -v
-
+                  build                  
 
       # Archive firmware
       - name: Archive firmware
