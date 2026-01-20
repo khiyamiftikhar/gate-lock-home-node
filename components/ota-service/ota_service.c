@@ -164,6 +164,25 @@ static esp_err_t fetch_ota_manifest(const char *manifest_url,manifest_t* manifes
     memset(&ota_service_state.manifest, 0, sizeof(ota_service_state.manifest));
     memset(ota_service_state.response_buffer, 0, sizeof(ota_service_state.response_buffer));
 
+
+    size_t free_heap = esp_get_free_heap_size();
+    size_t min_free = esp_get_minimum_free_heap_size();
+    size_t largest_free = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
+    
+    ESP_LOGI("OTA", "Free heap: %d bytes", free_heap);
+    ESP_LOGI("OTA", "Minimum free ever: %d bytes", min_free);
+    ESP_LOGI("OTA", "Largest free block: %d bytes", largest_free);
+    ESP_LOGI("HEAP", "DEFAULT largest: %d",
+    heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
+
+    ESP_LOGI("HEAP", "INTERNAL largest: %d",
+        heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+
+    ESP_LOGI("HEAP", "8BIT largest: %d",
+        heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+
+    
+
     // set new url for this request
     esp_http_client_set_url(client, manifest_url);
     ESP_LOGI(TAG,"url %s",manifest_url);
@@ -361,7 +380,7 @@ static void ota_task(void *pvParameter)
         }
         
         ota_service_state.update_pending=false;
-
+        
         esp_err_t err = fetch_ota_manifest(manifest_url, manifest);
 
         //Skip if manifest not available and wait again
