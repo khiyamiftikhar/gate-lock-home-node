@@ -3,26 +3,41 @@ import subprocess
 import os
 
 def usage():
+    print("")
     print("Usage:")
-    print("  python flash.py main -p COM22")
-    print("  python flash.py safe -p COM22")
+    print("  python flash.py <main|safe> -p COMx <command> [command ...]")
+    print("")
+    print("Examples:")
+    print("  python flash.py main -p COM22 flash")
+    print("  python flash.py main -p COM22 flash monitor")
+    print("  python flash.py main -p COM22 monitor")
+    print("  python flash.py safe -p COM22 flash monitor")
+    print("")
     sys.exit(1)
 
-# ---- parse arguments ----
-if len(sys.argv) != 4 or sys.argv[2] != "-p":
+# ---- basic arg check ----
+if len(sys.argv) < 5:
     usage()
 
 app = sys.argv[1]
-port = sys.argv[3]
 
 if app not in ("main", "safe"):
     print("ERROR: app must be 'main' or 'safe'")
     usage()
 
-# ---- resolve ESP-IDF ----
+if sys.argv[2] != "-p":
+    usage()
+
+port = sys.argv[3]
+
+commands = sys.argv[4:]
+if not commands:
+    usage()
+
+# ---- ESP-IDF environment ----
 idf_path = os.environ.get("IDF_PATH")
 if not idf_path:
-    print("ERROR: IDF_PATH not set. Run ESP-IDF export first.")
+    print("ERROR: IDF_PATH not set. Run ESP-IDF export.ps1 first.")
     sys.exit(1)
 
 idf_py = os.path.join(idf_path, "tools", "idf.py")
@@ -35,18 +50,19 @@ else:
     app_dir = "apps/safe_app"
     build_dir = "build_safe"
 
-# ---- build + flash command ----
+# ---- construct command ----
 cmd = [
     sys.executable,
     idf_py,
     "-C", app_dir,
     "-B", build_dir,
     "-p", port,
-    "flash"
 ]
 
-print("Flashing:", app)
-print("Port:", port)
-print("Command:", " ".join(cmd))
+cmd.extend(commands)
+
+# ---- execute ----
+print("\nRunning command:")
+print(" ", " ".join(cmd), "\n")
 
 subprocess.check_call(cmd)
