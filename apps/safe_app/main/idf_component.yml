@@ -1,0 +1,13 @@
+dependencies:
+  
+  wifi-smartconfig:
+    git: https://github.com/khiyamiftikhar/wifi-smartconfig
+    #version: fix/ota-reboot-resumption
+  event-adapter:
+    git: https://github.com/khiyamiftikhar/event-adapter
+
+  sync-manager:
+    git: https://github.com/khiyamiftikhar/sync-manager
+
+  log-capture:
+    git: https://github.com/khiyamiftikhar/log-capture

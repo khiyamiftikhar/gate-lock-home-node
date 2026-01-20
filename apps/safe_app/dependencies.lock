@@ -1,0 +1,49 @@
+dependencies:
+  event-adapter:
+    component_hash: 
+      09c0f200f9887c37fdfb457a711454505cd482087c542e984e8111b4beefeb1d
+    dependencies: []
+    source:
+      git: https://github.com/khiyamiftikhar/event-adapter
+      path: .
+      type: git
+    version: 2fffd440a3addbe1184246d608d33838f6745a6e
+  idf:
+    source:
+      type: idf
+    version: 5.5.2
+  log-capture:
+    component_hash: 
+      f2e7b006515a20048ce3011499a9d3cc7ef1f232af40aa568d59f9d1ff38afc7
+    dependencies: []
+    source:
+      git: https://github.com/khiyamiftikhar/log-capture
+      path: .
+      type: git
+    version: 7953d2efba0fe1ce3b8298bf9b745bab4924a792
+  sync-manager:
+    component_hash: 
+      9c9150729bf33dc087c3828f36fac2db75202d94ba1abeeaaf7c6847aebf4d12
+    dependencies: []
+    source:
+      git: https://github.com/khiyamiftikhar/sync-manager
+      path: .
+      type: git
+    version: 61a8f29c55c6d17c53d57bf2eab78e44969dc551
+  wifi-smartconfig:
+    component_hash: 
+      14ca4e6f1b1d1839d3610a314fc66ff9a9ebe8b1209b323a0eb0defb0d08b33f
+    dependencies: []
+    source:
+      git: https://github.com/khiyamiftikhar/wifi-smartconfig
+      path: .
+      type: git
+    version: c1f99650ed8a16af69ad0967cc829015e6cc7702
+direct_dependencies:
+- event-adapter
+- log-capture
+- sync-manager
+- wifi-smartconfig
+manifest_hash: a29e883d933e63609d5bec3acf396d34c976bceeb588ceb9fe55d382f6fa3d16
+target: esp32c3
+version: 2.0.0

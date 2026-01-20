@@ -1,0 +1,25 @@
+CONFIG_APP_BUILD_TYPE_APP_FACTORY=y
+# Default sdkconfig parameters to use the OTA
+# partition table layout, with a 4MB flash size
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+#Because was crashing on ota reboot saying "A stack overflow in task sys_evt has been detected"
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=4096
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+#CONFIG_LOG_DEFAULT_LEVEL=4
+
+
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="../../partitions_custom.csv"
+
+#Dynamic buffer required bcz contiguous mem not available for mbedtls
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_NONE=y
+CONFIG_MBEDTLS_CUSTOM_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CUSTOM_CERTIFICATE_BUNDLE_PATH="../../components/ota-service/cert/ca_cert.pem"
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_MAX_CERTS=200
+
+
+CONFIG_MBEDTLS_DYNAMIC_BUFFER=y
+
