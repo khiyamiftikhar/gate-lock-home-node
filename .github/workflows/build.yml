@@ -3,7 +3,7 @@ on:
   push:
     branches:
       - main
-      - fix/git-action-max-build-time
+      - fix/ota-mbed-error-fix
     tags:        # ← NEW: Trigger on version tags
       - 'v*'
   pull_request:
