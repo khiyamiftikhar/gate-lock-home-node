@@ -273,12 +273,28 @@ jobs:
             OTA_DIR="artifacts/${target}-ota-${{ env.VERSION }}"
             if [ -d "$OTA_DIR" ]; then
               echo "📋 Found OTA artifacts in $OTA_DIR"
-              find "$OTA_DIR" -name "firmware-ota-*.bin" -exec cp {} release_files/ \; 2>/dev/null || true
-              find "$OTA_DIR" -name "ota-manifest-*.json" -exec cp {} release_files/ \; 2>/dev/null || true
-            else
-              echo "⚠️ No OTA artifacts found for ${target}"
-            fi
-          done
+              
+              BIN_COUNT=$(ls "$OTA_DIR"/firmware-ota-*.bin 2>/dev/null | wc -l)
+              JSON_COUNT=$(ls "$OTA_DIR"/ota-manifest-*.json 2>/dev/null | wc -l)
+
+              if [ "$BIN_COUNT" -gt 0 ]; then
+                cp "$OTA_DIR"/firmware-ota-*.bin release_files/
+                echo "✅ Copied OTA firmware for $target"
+              else
+                echo "❌ No OTA firmware bin found for $target"
+              fi
+
+              if [ "$JSON_COUNT" -gt 0 ]; then
+                cp "$OTA_DIR"/ota-manifest-*.json release_files/
+                echo "✅ Copied OTA manifest for $target"
+              else
+                echo "❌ No OTA manifest found for $target"
+              fi
+
+                          else
+                            echo "⚠️ No OTA artifacts found for ${target}"
+                          fi
+                        done
           
           # Create latest manifest files (stable URLs) - only if originals exist
           for target in $TARGETS; do
