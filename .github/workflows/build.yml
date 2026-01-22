@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: ${{ fromJson(env.TARGETS_JSON) }}
+        target: [esp32, esp32s3]
    
     steps:
       - name: Export targets for shell
