@@ -245,6 +245,10 @@ jobs:
         with:
           path: artifacts/
          
+      - name: Export targets for shell
+        run: |
+          echo "TARGETS=esp32 esp32s3" >> $GITHUB_ENV
+
       - name: Prepare release files
         run: |
           mkdir -p release_files
