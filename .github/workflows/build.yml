@@ -1,4 +1,7 @@
 name: ESP-IDF CI
+env:
+  TARGETS_JSON: '["esp32","esp32s3"]'
+
 on:
   push:
     branches:
@@ -16,9 +19,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [esp32, esp32s3]
+        target: ${{ fromJson(env.TARGETS_JSON) }}
    
     steps:
+      - name: Export targets for shell
+        run: |
+          echo "TARGETS=$(echo '${{ env.TARGETS_JSON }}' | jq -r '.[]' | xargs)" >> $GITHUB_ENV
+
       - name: Checkout repository
         uses: actions/checkout@v4
         
@@ -248,7 +255,7 @@ jobs:
           find artifacts/ -type f -name "*.bin" -o -name "*.json" | head -20
           
           # Create complete firmware packages (ZIP files for testing)
-          for target in esp32 esp32c3; do
+          for target in $TARGETS; do
             if [ -d "artifacts/${target}-firmware-${{ env.VERSION }}" ]; then
               echo "📦 Processing ${target} firmware package..."
               cd "artifacts/${target}-firmware-${{ env.VERSION }}"
@@ -262,7 +269,7 @@ jobs:
           
           # Move OTA files and manifests (look in OTA-specific artifact directories)
           echo "🔍 Looking for OTA files..."
-          for target in esp32 esp32c3; do
+          for target in $TARGETS; do
             OTA_DIR="artifacts/${target}-ota-${{ env.VERSION }}"
             if [ -d "$OTA_DIR" ]; then
               echo "📋 Found OTA artifacts in $OTA_DIR"
@@ -274,7 +281,7 @@ jobs:
           done
           
           # Create latest manifest files (stable URLs) - only if originals exist
-          for target in esp32 esp32c3; do
+          for target in $TARGETS; do
             if [ -f "release_files/ota-manifest-${target}.json" ]; then
               cp "release_files/ota-manifest-${target}.json" "release_files/ota-manifest-${target}-latest.json"
               echo "📋 Created: ota-manifest-${target}-latest.json"
@@ -348,7 +355,7 @@ jobs:
           fi
           
           # Deploy manifests for each target
-          for target in esp32 esp32c3; do
+          for target in $TARGETS; do
             if [ -f "../release_files/ota-manifest-${target}.json" ]; then
               # Deploy to specific channel
               cp "../release_files/ota-manifest-${target}.json" "ota/${CHANNEL}/ota-manifest-${target}.json"
