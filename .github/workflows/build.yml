@@ -311,6 +311,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+
+      - name: Export targets for shell
+        run: |
+          echo "TARGETS=esp32 esp32s3" >> $GITHUB_ENV
+
+
       - name: Deploy Professional OTA
         run: |
           # Setup git for gh-pages
