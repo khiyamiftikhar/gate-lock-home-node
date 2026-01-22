@@ -3,7 +3,7 @@ on:
   push:
     branches:
       - main
-      - fix/ota-mbed-error-fix
+      - development/add-esp32s3-support
     tags:        # ← NEW: Trigger on version tags
       - 'v*'
   pull_request:
@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [esp32, esp32c3]
+        target: [esp32, esp32s3]
    
     steps:
       - name: Checkout repository
