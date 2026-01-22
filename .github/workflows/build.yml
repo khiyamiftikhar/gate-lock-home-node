@@ -6,7 +6,7 @@ on:
   push:
     branches:
       - main
-      - development/add-esp32s3-support
+      #- development/add-esp32s3-support
     tags:        # ← NEW: Trigger on version tags
       - 'v*'
   pull_request:
@@ -448,19 +448,26 @@ jobs:
           # Commit and deploy
           touch .nojekyll
           git add .
+
           if ! git diff --staged --quiet; then
             git commit -m "Deploy OTA ${{ env.VERSION }} to ${CHANNEL} channel"
             git push origin gh-pages
-            
+
             echo ""
             echo "🎉 Professional OTA deployed successfully!"
-            echo "📱 Your ESP32 devices can now use these STATIC URLs:"
+            echo "📱 OTA manifest URLs:"
             echo ""
-            echo "   Stable:  https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/ota-manifest-esp32.json"
-            echo "   Beta:    https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/beta/ota-manifest-esp32.json"  
-            echo "   Dev:     https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/dev/ota-manifest-esp32.json"
-            echo ""
-            echo "📊 Browse updates: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/"
+
+            for target in $TARGETS; do
+              echo "   ${target^^}:"
+              echo "     Stable: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/ota-manifest-${target}.json"
+              echo "     Beta:   https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/beta/ota-manifest-${target}.json"
+              echo "     Dev:    https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/dev/ota-manifest-${target}.json"
+              echo ""
+            done
+
+            echo "📊 Browse updates:"
+            echo "   https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/"
           else
             echo "ℹ️ No changes to deploy"
           fi
