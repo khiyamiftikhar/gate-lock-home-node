@@ -372,15 +372,25 @@ jobs:
           done
           
           # Create/update channel info file
+          TARGETS_JSON_ARRAY=$(printf '"%s",' $TARGETS | sed 's/,$//')
+
           cat > "ota/${CHANNEL}/channel-info.json" << EOF
           {
             "channel": "${CHANNEL}",
             "latest_version": "${{ env.VERSION }}",
             "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "targets": ["esp32", "esp32c3"],
+            "targets": [${TARGETS_JSON_ARRAY}],
             "changelog_url": "https://github.com/${{ github.repository }}/releases/tag/${{ env.VERSION }}"
           }
           EOF
+
+          
+          generate_links() {
+            local channel_path="$1"
+            for target in $TARGETS; do
+              echo "<li>${target^^}: <code>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/${channel_path}ota-manifest-${target}.json</code></li>"
+            done
+          }
           
           # Create user-friendly index page
           cat > ota/index.html << EOF
@@ -396,8 +406,6 @@ jobs:
                   .stable { border-left: 4px solid #28a745; }
                   .beta { border-left: 4px solid #ffc107; }
                   .dev { border-left: 4px solid #dc3545; }
-                  a { color: #0366d6; text-decoration: none; }
-                  a:hover { text-decoration: underline; }
                   code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 14px; }
               </style>
           </head>
@@ -405,42 +413,37 @@ jobs:
               <h1>${{ github.event.repository.name }} - OTA Updates</h1>
               <p><strong>Latest Release:</strong> ${{ env.VERSION }} (${CHANNEL})</p>
               <p><strong>Updated:</strong> $(date -u)</p>
-              
+
               <div class="channel stable">
                   <h2>🚀 Stable Channel</h2>
-                  <p>Production-ready releases</p>
                   <ul>
-                      <li>ESP32: <code>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/ota-manifest-esp32.json</code></li>
-                      <li>ESP32-C3: <code>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/ota-manifest-esp32c3.json</code></li>
+                      $(generate_links "")
                   </ul>
               </div>
-              
+
               <div class="channel beta">
                   <h2>🧪 Beta Channel</h2>
-                  <p>Testing releases (v*-beta, v*-test)</p>
                   <ul>
-                      <li>ESP32: <code>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/beta/ota-manifest-esp32.json</code></li>
-                      <li>ESP32-C3: <code>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/beta/ota-manifest-esp32c3.json</code></li>
+                      $(generate_links "beta/")
                   </ul>
               </div>
-              
+
               <div class="channel dev">
                   <h2>🔧 Dev Channel</h2>
-                  <p>Development releases (v*-alpha, v*-dev)</p>
                   <ul>
-                      <li>ESP32: <code>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/dev/ota-manifest-esp32.json</code></li>
-                      <li>ESP32-C3: <code>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/dev/ota-manifest-esp32c3.json</code></li>
+                      $(generate_links "dev/")
                   </ul>
               </div>
-              
+
               <hr>
               <p><small>
-                  <a href="https://github.com/${{ github.repository }}">View Repository</a> | 
+                  <a href="https://github.com/${{ github.repository }}">View Repository</a> |
                   <a href="https://github.com/${{ github.repository }}/releases">View Releases</a>
               </small></p>
           </body>
           </html>
           EOF
+
           
           # Commit and deploy
           touch .nojekyll
