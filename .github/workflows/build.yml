@@ -1,9 +1,12 @@
 name: ESP-IDF CI
+env:
+  TARGETS_JSON: '["esp32","esp32s3"]'
+
 on:
   push:
     branches:
       - main
-      - fix/ota-mbed-error-fix
+     # - development/add-esp32s3-support
     tags:        # ← NEW: Trigger on version tags
       - 'v*'
   pull_request:
@@ -16,9 +19,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [esp32, esp32c3]
+        target: [esp32, esp32s3]
    
     steps:
+      - name: Export targets for shell
+        run: |
+          echo "TARGETS=$(echo '${{ env.TARGETS_JSON }}' | jq -r '.[]' | xargs)" >> $GITHUB_ENV
+
       - name: Checkout repository
         uses: actions/checkout@v4
         
@@ -238,6 +245,10 @@ jobs:
         with:
           path: artifacts/
          
+      - name: Export targets for shell
+        run: |
+          echo "TARGETS=esp32 esp32s3" >> $GITHUB_ENV
+
       - name: Prepare release files
         run: |
           mkdir -p release_files
@@ -248,7 +259,7 @@ jobs:
           find artifacts/ -type f -name "*.bin" -o -name "*.json" | head -20
           
           # Create complete firmware packages (ZIP files for testing)
-          for target in esp32 esp32c3; do
+          for target in $TARGETS; do
             if [ -d "artifacts/${target}-firmware-${{ env.VERSION }}" ]; then
               echo "📦 Processing ${target} firmware package..."
               cd "artifacts/${target}-firmware-${{ env.VERSION }}"
@@ -262,19 +273,35 @@ jobs:
           
           # Move OTA files and manifests (look in OTA-specific artifact directories)
           echo "🔍 Looking for OTA files..."
-          for target in esp32 esp32c3; do
+          for target in $TARGETS; do
             OTA_DIR="artifacts/${target}-ota-${{ env.VERSION }}"
             if [ -d "$OTA_DIR" ]; then
               echo "📋 Found OTA artifacts in $OTA_DIR"
-              find "$OTA_DIR" -name "firmware-ota-*.bin" -exec cp {} release_files/ \; 2>/dev/null || true
-              find "$OTA_DIR" -name "ota-manifest-*.json" -exec cp {} release_files/ \; 2>/dev/null || true
-            else
-              echo "⚠️ No OTA artifacts found for ${target}"
-            fi
-          done
+              
+              BIN_COUNT=$(ls "$OTA_DIR"/firmware-ota-*.bin 2>/dev/null | wc -l)
+              JSON_COUNT=$(ls "$OTA_DIR"/ota-manifest-*.json 2>/dev/null | wc -l)
+
+              if [ "$BIN_COUNT" -gt 0 ]; then
+                cp "$OTA_DIR"/firmware-ota-*.bin release_files/
+                echo "✅ Copied OTA firmware for $target"
+              else
+                echo "❌ No OTA firmware bin found for $target"
+              fi
+
+              if [ "$JSON_COUNT" -gt 0 ]; then
+                cp "$OTA_DIR"/ota-manifest-*.json release_files/
+                echo "✅ Copied OTA manifest for $target"
+              else
+                echo "❌ No OTA manifest found for $target"
+              fi
+
+                          else
+                            echo "⚠️ No OTA artifacts found for ${target}"
+                          fi
+                        done
           
           # Create latest manifest files (stable URLs) - only if originals exist
-          for target in esp32 esp32c3; do
+          for target in $TARGETS; do
             if [ -f "release_files/ota-manifest-${target}.json" ]; then
               cp "release_files/ota-manifest-${target}.json" "release_files/ota-manifest-${target}-latest.json"
               echo "📋 Created: ota-manifest-${target}-latest.json"
@@ -303,6 +330,12 @@ jobs:
           files: release_files/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+      - name: Export targets for shell
+        run: |
+          echo "TARGETS=esp32 esp32s3" >> $GITHUB_ENV
+
 
       - name: Deploy Professional OTA
         run: |
@@ -348,7 +381,7 @@ jobs:
           fi
           
           # Deploy manifests for each target
-          for target in esp32 esp32c3; do
+          for target in $TARGETS; do
             if [ -f "../release_files/ota-manifest-${target}.json" ]; then
               # Deploy to specific channel
               cp "../release_files/ota-manifest-${target}.json" "ota/${CHANNEL}/ota-manifest-${target}.json"
@@ -365,15 +398,25 @@ jobs:
           done
           
           # Create/update channel info file
+          TARGETS_JSON_ARRAY=$(printf '"%s",' $TARGETS | sed 's/,$//')
+
           cat > "ota/${CHANNEL}/channel-info.json" << EOF
           {
             "channel": "${CHANNEL}",
             "latest_version": "${{ env.VERSION }}",
             "updated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "targets": ["esp32", "esp32c3"],
+            "targets": [${TARGETS_JSON_ARRAY}],
             "changelog_url": "https://github.com/${{ github.repository }}/releases/tag/${{ env.VERSION }}"
           }
           EOF
+
+          
+          generate_links() {
+            local channel_path="$1"
+            for target in $TARGETS; do
+              echo "<li>${target^^}: <code>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/${channel_path}ota-manifest-${target}.json</code></li>"
+            done
+          }
           
           # Create user-friendly index page
           cat > ota/index.html << EOF
@@ -389,8 +432,6 @@ jobs:
                   .stable { border-left: 4px solid #28a745; }
                   .beta { border-left: 4px solid #ffc107; }
                   .dev { border-left: 4px solid #dc3545; }
-                  a { color: #0366d6; text-decoration: none; }
-                  a:hover { text-decoration: underline; }
                   code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 14px; }
               </style>
           </head>
@@ -398,59 +439,61 @@ jobs:
               <h1>${{ github.event.repository.name }} - OTA Updates</h1>
               <p><strong>Latest Release:</strong> ${{ env.VERSION }} (${CHANNEL})</p>
               <p><strong>Updated:</strong> $(date -u)</p>
-              
+
               <div class="channel stable">
                   <h2>🚀 Stable Channel</h2>
-                  <p>Production-ready releases</p>
                   <ul>
-                      <li>ESP32: <code>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/ota-manifest-esp32.json</code></li>
-                      <li>ESP32-C3: <code>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/ota-manifest-esp32c3.json</code></li>
+                      $(generate_links "")
                   </ul>
               </div>
-              
+
               <div class="channel beta">
                   <h2>🧪 Beta Channel</h2>
-                  <p>Testing releases (v*-beta, v*-test)</p>
                   <ul>
-                      <li>ESP32: <code>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/beta/ota-manifest-esp32.json</code></li>
-                      <li>ESP32-C3: <code>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/beta/ota-manifest-esp32c3.json</code></li>
+                      $(generate_links "beta/")
                   </ul>
               </div>
-              
+
               <div class="channel dev">
                   <h2>🔧 Dev Channel</h2>
-                  <p>Development releases (v*-alpha, v*-dev)</p>
                   <ul>
-                      <li>ESP32: <code>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/dev/ota-manifest-esp32.json</code></li>
-                      <li>ESP32-C3: <code>https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/dev/ota-manifest-esp32c3.json</code></li>
+                      $(generate_links "dev/")
                   </ul>
               </div>
-              
+
               <hr>
               <p><small>
-                  <a href="https://github.com/${{ github.repository }}">View Repository</a> | 
+                  <a href="https://github.com/${{ github.repository }}">View Repository</a> |
                   <a href="https://github.com/${{ github.repository }}/releases">View Releases</a>
               </small></p>
           </body>
           </html>
           EOF
+
           
           # Commit and deploy
           touch .nojekyll
           git add .
+
           if ! git diff --staged --quiet; then
             git commit -m "Deploy OTA ${{ env.VERSION }} to ${CHANNEL} channel"
             git push origin gh-pages
-            
+
             echo ""
             echo "🎉 Professional OTA deployed successfully!"
-            echo "📱 Your ESP32 devices can now use these STATIC URLs:"
+            echo "📱 OTA manifest URLs:"
             echo ""
-            echo "   Stable:  https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/ota-manifest-esp32.json"
-            echo "   Beta:    https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/beta/ota-manifest-esp32.json"  
-            echo "   Dev:     https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/dev/ota-manifest-esp32.json"
-            echo ""
-            echo "📊 Browse updates: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/"
+
+            for target in $TARGETS; do
+              echo "   ${target^^}:"
+              echo "     Stable: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/ota-manifest-${target}.json"
+              echo "     Beta:   https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/beta/ota-manifest-${target}.json"
+              echo "     Dev:    https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/dev/ota-manifest-${target}.json"
+              echo ""
+            done
+
+            echo "📊 Browse updates:"
+            echo "   https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/ota/"
           else
             echo "ℹ️ No changes to deploy"
           fi
