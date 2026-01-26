@@ -1,12 +1,12 @@
 name: ESP-IDF CI
 env:
-  TARGETS_JSON: '["esp32","esp32s3"]'
+  TARGETS_JSON: '["esp32s3","esp32c3"]'
 
 on:
   push:
     branches:
       - main
-     # - development/add-esp32s3-support
+      - development/add-esp32c3-support
     tags:        # ← NEW: Trigger on version tags
       - 'v*'
   pull_request:
@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [esp32, esp32s3]
+        target: [esp32s3, esp32c3]
    
     steps:
       - name: Export targets for shell
@@ -234,7 +234,7 @@ jobs:
           echo "- **Version**: ${{ env.VERSION }}" >> CHANGELOG.md
           echo "- **Build Date**: $(date -u +%Y-%m-%d\ %H:%M:%S\ UTC)" >> CHANGELOG.md
           echo "- **Commit**: $(git rev-parse --short HEAD)" >> CHANGELOG.md
-          echo "- **Targets**: ESP32, ESP32-C3" >> CHANGELOG.md
+          echo "- **Targets**: ESP32S3, ESP32-C3" >> CHANGELOG.md
           
           # Show generated changelog
           echo "📋 Generated CHANGELOG.md:"
@@ -247,7 +247,7 @@ jobs:
          
       - name: Export targets for shell
         run: |
-          echo "TARGETS=esp32 esp32s3" >> $GITHUB_ENV
+          echo "TARGETS=esp32s3 esp32c3" >> $GITHUB_ENV
 
       - name: Prepare release files
         run: |
@@ -334,7 +334,7 @@ jobs:
 
       - name: Export targets for shell
         run: |
-          echo "TARGETS=esp32 esp32s3" >> $GITHUB_ENV
+          echo "TARGETS=esp32s3 esp32c3" >> $GITHUB_ENV
 
 
       - name: Deploy Professional OTA
