@@ -107,6 +107,8 @@ static void gui_op_task(){
 
 esp_err_t gui_inform(gui_event_t event, gui_event_data_t *evt_data)
 {
+    
+    
     ESP_LOGI(TAG,"updataing gui");
     gui_op_info_t op_info = {0};
 
@@ -125,9 +127,19 @@ esp_err_t gui_inform(gui_event_t event, gui_event_data_t *evt_data)
     return (ret == pdTRUE) ? ESP_OK : ESP_FAIL;
 }
 
+esp_err_t gui_inform_dummy(gui_event_t event, gui_event_data_t *evt_data){
+    return ESP_OK;
+}
+
 esp_err_t gui_op_init(){
 
+    #if !CONFIG_FEATURE_GUI
 
+        gui_op.interface.gui_inform=gui_inform_dummy;
+        gui_op.init=true;
+
+        return ESP_OK;
+    #endif
     gui_op.gui_op_queue = xQueueCreate(10, sizeof(gui_op_info_t));
     ESP_ERROR_CHECK(gui_op.gui_op_queue==NULL);
 

@@ -53,6 +53,10 @@ static const char* TAG="gui";
 
 
 esp_err_t lcd_init(){
+
+    #if !CONFIG_FEATURE_GUI
+        return ESP_OK;
+    #endif
     
     esp_err_t ret=0;
     ESP_LOGI(TAG, "Initialize I2C bus");
