@@ -1,4 +1,4 @@
-# ESP-IDF Partition Table with larger OTA because esp32c3 build gives  larger firmware which doesnot fit in 1MB
+# ESP-IDF Partition Table with larger OTA because esp32 and esp32c3 build gives  larger firmware which doesnot fit in 1MB
 nvs,data,nvs,0x9000,16K,
 otadata,data,ota,0xd000,8K,
 phy_init,data,phy,0xf000,4K,
