@@ -23,8 +23,8 @@ else()
 
     idf_component_register(
         SRCS
-            "src/gui_op.c"
-            "src/lcd_device.c"
+            "src/gui_op_dummy.c"
+            "src/lcd_device_dummy.c"
         INCLUDE_DIRS
             "include"
             "."
