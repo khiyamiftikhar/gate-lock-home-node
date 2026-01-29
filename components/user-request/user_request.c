@@ -26,6 +26,23 @@ static struct{
 
 
 
+static void ota_update_request_handler(http_request_t* request,const char* uri){
+    esp_err_t err=0;
+    ESP_LOGI(TAG,"ota update handler entered");
+    err=USER_REQUEST_post_event(USER_REQUEST_ROUTINE_EVENT_USER_COMMAND_OTA_UPDATE,&request,sizeof(request));
+
+    if (err != ESP_OK) {
+        user_request_state.server_interface->send_response(request,"failure");
+        user_request_state.server_interface->close_async_connection(request);
+        return;
+    }
+    
+
+
+    
+}
+
+
 
 static void log_request_handler(http_request_t* request,const char* uri){
     BaseType_t ret=pdTRUE;
