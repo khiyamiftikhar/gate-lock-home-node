@@ -155,6 +155,7 @@ esp_err_t user_request_create(user_request_config_t* config){
     user_request_state.server_interface->register_uri(config->gate_close_endpoint,METHOD_GET,gate_close_request_handler);
     user_request_state.server_interface->register_uri(config->gate_open_endpoint,METHOD_GET,gate_open_request_handler);
     user_request_state.server_interface->register_uri(config->log_endpoint,METHOD_GET,log_request_handler);
+    user_request_state.server_interface->register_uri(config->ota_update_endpoint,METHOD_GET,ota_update_request_handler);
 
 
     //The response of esp send will be pushed to this queue by the method of output interface
@@ -164,6 +165,8 @@ esp_err_t user_request_create(user_request_config_t* config){
     USER_REQUEST_register_event(USER_REQUEST_ROUTINE_EVENT_USER_COMMAND_GATE_CLOSE,NULL,NULL);
     USER_REQUEST_register_event(USER_REQUEST_ROUTINE_EVENT_USER_COMMAND_GATE_STATUS,NULL,NULL);
     USER_REQUEST_register_event(USER_REQUEST_ROUTINE_EVENT_USER_COMMAND_LOG,NULL,NULL);
+    USER_REQUEST_register_event(USER_REQUEST_ROUTINE_EVENT_USER_COMMAND_OTA_UPDATE,NULL,NULL);
+
      
 
 
