@@ -204,8 +204,17 @@ static void routine_user_request_events_handler (void *handler_arg,
         case USER_REQUEST_ROUTINE_EVENT_USER_COMMAND_LOG:
 
            delegate_post(delegated_to_task_send_log,&ctx,sizeof(void*));
+           break;
 
-                
+        case USER_REQUEST_ROUTINE_EVENT_USER_COMMAND_OTA_UPDATE:
+
+            ret=ota_process_start();
+
+            //If ok then inform success. Failure is already responded outside case at the end
+            if(ret==ESP_OK){
+                user_request_response_inform_command_status(true,ctx);
+            }
+            
 
 
         default:

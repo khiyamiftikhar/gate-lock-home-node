@@ -223,7 +223,8 @@ void app_main(void)
 
     user_request_config_t request_config={ .gate_close_endpoint="/close-gate",
                                                     .gate_open_endpoint="/open-gate",
-                                                    .log_endpoint="/get-log"
+                                                    .log_endpoint="/get-log",
+                                                    .ota_update_endpoint="/ota-update"
                                                   
                                          };
     ret=user_request_create(&request_config);
@@ -262,7 +263,7 @@ void app_main(void)
 
     esp_err_t ota_err=ota_service_init();
 
-    ota_process_start();
+//    ota_process_start();
 
     while(1){
         //user_command(USER_COMMAND_LOCK_CLOSE);

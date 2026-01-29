@@ -6,7 +6,7 @@ on:
   push:
     branches:
       - main
-      - development/add-esp32c3-support
+      - development/server-add-ota-request
     tags:        # ← NEW: Trigger on version tags
       - 'v*'
   pull_request:

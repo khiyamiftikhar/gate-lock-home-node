@@ -12,6 +12,7 @@ DECLARE_EVENT_ADAPTER(USER_REQUEST);
 #define USER_REQUEST_ROUTINE_EVENT_USER_COMMAND_GATE_CLOSE    2
 #define USER_REQUEST_ROUTINE_EVENT_USER_COMMAND_GATE_STATUS   3
 #define USER_REQUEST_ROUTINE_EVENT_USER_COMMAND_LOG           4
+#define USER_REQUEST_ROUTINE_EVENT_USER_COMMAND_OTA_UPDATE    5
 
 
 //This is the interface it provides
@@ -28,6 +29,7 @@ typedef struct{
     const char* gate_open_endpoint;
     const char* gate_close_endpoint;
     const char* log_endpoint;
+    const char* ota_update_endpoint;
 
 }user_request_config_t;
 
