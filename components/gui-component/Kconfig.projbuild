@@ -1,35 +1,47 @@
-menu "LCD Configuration"
+menu "GUI Configuration"
 
-    choice LCD_CONTROLLER
-        prompt "LCD controller model"
-        default LCD_CONTROLLER_SSD1306
-        help
-            Select LCD controller model
+config FEATURE_GUI
+    bool "Enable GUI support"
+    default y
+    help
+        Enable graphical user interface support.
+        Disable this on low-memory targets (e.g. ESP32-C3).
 
-        config LCD_CONTROLLER_SSD1306
-            bool "SSD1306"
+if FEATURE_GUI
 
-        config LCD_CONTROLLER_SH1107
-            bool "SH1107"
-    endchoice
+choice LCD_CONTROLLER
+    prompt "LCD controller model"
+    default LCD_CONTROLLER_SSD1306
+    help
+        Select LCD controller model
 
-    if LCD_CONTROLLER_SSD1306
-        choice SSD1306_HEIGHT
-            prompt "SSD1306 Height in pixels"
-            default SSD1306_HEIGHT_32
-            help
-                Height of the display in pixels. a.k.a vertical resolution
+    config LCD_CONTROLLER_SSD1306
+        bool "SSD1306"
 
-            config SSD1306_HEIGHT_64
-                bool "64"
-            config SSD1306_HEIGHT_32
-                bool "32"
-        endchoice
+    config LCD_CONTROLLER_SH1107
+        bool "SH1107"
+endchoice
 
-        config SSD1306_HEIGHT
-            int
-            default 64 if SSD1306_HEIGHT_64
-            default 32 if SSD1306_HEIGHT_32
-    endif
+
+if LCD_CONTROLLER_SSD1306
+
+choice SSD1306_HEIGHT_SEL
+    prompt "SSD1306 Height in pixels"
+    default SSD1306_HEIGHT_32
+
+    config SSD1306_HEIGHT_64
+        bool "64 pixels"
+
+    config SSD1306_HEIGHT_32
+        bool "32 pixels"
+endchoice
+
+config SSD1306_HEIGHT
+    int
+    default 64 if SSD1306_HEIGHT_64
+    default 32 if SSD1306_HEIGHT_32
+endif
+
+endif # FEATURE_GUI
 
 endmenu

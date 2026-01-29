@@ -1,0 +1,4 @@
+
+
+#GUI enable
+CONFIG_FEATURE_GUI=n
