@@ -39,3 +39,4 @@ dependencies:
 
   log-capture:
     git: https://github.com/khiyamiftikhar/log-capture
+    version: fix/log-timestamp-fix
