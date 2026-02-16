@@ -53,7 +53,7 @@ static void delegated_to_task_send_log(void *arg, size_t len){
     log_snapshot_take(&snap);
     uint8_t count=0;
     void* ctx= *(void**)arg;
-    ESP_LOGI(TAG,"sending log data in chunks , ctc %p,", ctx);
+    //ESP_LOGI(TAG,"sending log data in chunks , ctc %p,", ctx);
     
     do{
         bytes_read=log_snapshot_read(&snap,buffer,sizeof(buffer)-1);
@@ -185,8 +185,8 @@ static void routine_user_request_events_handler (void *handler_arg,
     void** context=(void**)event_data;
     void* ctx=*context;
 
-    ESP_LOGI(TAG,"ctx ptr address print %p",context);
-    ESP_LOGI(TAG,"ctx address print %p",ctx);
+    //ESP_LOGI(TAG,"ctx ptr address print %p",context);
+    //ESP_LOGI(TAG,"ctx address print %p",ctx);
 
     switch(id){
 

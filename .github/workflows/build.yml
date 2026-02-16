@@ -6,7 +6,7 @@ on:
   push:
     branches:
       - main
-      - development/server-add-ota-request
+      - fix/log-timestamp-fix
     tags:        # ← NEW: Trigger on version tags
       - 'v*'
   pull_request:
