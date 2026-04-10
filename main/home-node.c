@@ -27,6 +27,7 @@
 #include "log_capture.h"
 #include "user_output.h"
 #include "user_request.h"
+#include "logger.h"
 
 
 //#include "mdns_service.h"
