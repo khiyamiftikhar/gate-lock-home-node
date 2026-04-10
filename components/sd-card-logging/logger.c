@@ -40,6 +40,7 @@ static void sd_log_task(void *arg)
         /* Flush periodically */
         fflush(f);
 
+        ESP_LOGI("SD_LOG", "Flushed to SD card");
         vTaskDelay(pdMS_TO_TICKS(s_interval_ms));
     }
 }
