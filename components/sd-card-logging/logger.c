@@ -1,4 +1,4 @@
-#include "sd_log_writer.h"
+#include "logger.h"
 #include "log_capture.h"
 
 #include <stdio.h>
