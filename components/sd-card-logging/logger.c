@@ -1,6 +1,6 @@
 #include "logger.h"
 #include "log_capture.h"
-
+#include "esp_log.h"
 #include <stdio.h>
 #include <string.h>
 
