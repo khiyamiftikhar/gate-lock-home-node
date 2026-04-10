@@ -6,4 +6,5 @@ idf_component_register(SRCS "home-node.c" "routine_event_handler.c"
                                     ota-service mdns-service
                                     sync-manager
                                     gui-interface gui-component log-capture
+                                    sd-card-logging
                                     )
