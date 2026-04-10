@@ -8,3 +8,5 @@ ota-service/modeling
 build*
 apps*
 dependencies.lock
+user_input_not_used/.
+user_output_not_used/.

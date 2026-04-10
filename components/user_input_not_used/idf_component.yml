@@ -1,6 +1,0 @@
-dependencies:
-  espressif/button:
-    version: "*"
-  message_service:
-    git: https://github.com/khiyamiftikhar/espnow-components
-    path: message_service
