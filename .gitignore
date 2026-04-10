@@ -7,3 +7,4 @@ downloads/
 ota-service/modeling
 build*
 apps*
+dependencies.lock
