@@ -6,49 +6,83 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "sd_mount.h"
 
-#define LOG_FILE_PATH "/sdcard/log.txt"
+#define LOG_FILE_PATH "/sdcard/loghome.txt"
 #define CHUNK_SIZE    256
 
 static TaskHandle_t s_task = NULL;
-static uint32_t s_interval_ms = 2000;  // default 2 sec
+static uint32_t s_interval_ms = 4000;  // default 2 sec
 
 /* ---------- Internal Task ---------- */
 
 static void sd_log_task(void *arg)
 {
-    FILE *f = fopen(LOG_FILE_PATH, "a");
-    if (!f) {
-        printf("SD_LOG: Failed to open file\n");
-        vTaskDelete(NULL);
-        return;
-    }
-
-    log_snapshot_t snap;
+    log_snapshot_t snap={0};
     char buf[CHUNK_SIZE];
 
+    FILE *f = NULL;
+
     while (1) {
+
+        /* Try to open file if not open */
+        if (!f) {
+            f = fopen(LOG_FILE_PATH, "a");
+
+            if (!f) {
+                ESP_LOGW("SD_LOG", "Failed to open file, retrying...");
+                vTaskDelay(pdMS_TO_TICKS(2000)); // retry delay
+                continue;
+            }
+
+            ESP_LOGI("SD_LOG", "File opened successfully");
+        }
+
         /* Take snapshot */
         log_snapshot_take(&snap);
 
-        /* Read all available data */
-        size_t n;
-        while ((n = log_snapshot_read(&snap, buf, sizeof(buf))) > 0) {
-            fwrite(buf, 1, n, f);
-        }
+        /* Write logs */
+        size_t bytes_read;
 
-        /* Flush periodically */
-        fflush(f);
+        do{
+            bytes_read=log_snapshot_read(&snap,buf,sizeof(buf)-1);
+            //ESP_LOGI(TAG,"bytes read %d",bytes_read);
+            if(bytes_read>0){
+                buf[bytes_read]='\0';   //null terminate
+                if (fwrite(buf, 1, bytes_read, f) != bytes_read) {
+                    ESP_LOGE("SD_LOG", "Write failed!");
 
-        ESP_LOGI("SD_LOG", "Flushed to SD card");
+                    fflush(f);
+                    fclose(f);
+                    f = NULL;   // force reopen
+                    break;
+                }
+
+            }
+            else{
+                fflush(f);
+                fclose(f);
+                f = NULL;   // force reopen
+            }
+        }while(bytes_read>0);
+
+
         vTaskDelay(pdMS_TO_TICKS(s_interval_ms));
     }
 }
-
 /* ---------- Public API ---------- */
 
 bool sd_log_writer_start(uint32_t interval_ms)
 {
+
+    bool ret=sd_mount_init();
+
+    if(ret==false){
+        ESP_LOGE("SD_LOG","Failed to initialize SD card");
+        return false;
+        }
+
+
     if (s_task) {
         return false; // already running
     }
