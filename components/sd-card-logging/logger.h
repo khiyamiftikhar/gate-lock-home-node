@@ -1,6 +1,6 @@
 #pragma once
 #include <stdbool.h>
-#include "stdint.h"
+#include <stdint.h>
 
 /* Start periodic SD logging
  * interval_ms → how often to flush logs
