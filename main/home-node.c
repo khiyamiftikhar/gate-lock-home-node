@@ -125,7 +125,7 @@ void app_main(void)
     routine_handler_init();
 
     log_capture_init();
-    sd_log_writer_start(2000);   // flush every 2 seconds, tune as needed
+    sd_log_writer_start(4000);   // flush every 2 seconds, tune as needed
 
 
     //wifi_init();
