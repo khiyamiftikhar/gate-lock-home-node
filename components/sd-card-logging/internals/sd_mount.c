@@ -5,6 +5,11 @@
 #include "driver/sdspi_host.h"
 #include "sdkconfig.h"
 
+#define SD_SPI_MOSI CONFIG_SD_SPI_MOSI
+#define SD_SPI_MISO CONFIG_SD_SPI_MISO
+#define SD_SPI_SCLK CONFIG_SD_SPI_SCLK
+#define SD_SPI_CS   CONFIG_SD_SPI_CS
+
 static sdmmc_card_t *card;
 
 bool sd_mount_init(void)
@@ -12,13 +17,13 @@ bool sd_mount_init(void)
     esp_err_t ret;
 
     sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-    host.slot = CONFIG_SD_SPI_HOST;
+    host.slot = SPI2_HOST;
     host.max_freq_khz = 5000;   // do this for bring-up, can be increased later
 
     spi_bus_config_t bus_cfg = {
-        .mosi_io_num = CONFIG_SD_SPI_MOSI,
-        .miso_io_num = CONFIG_SD_SPI_MISO,
-        .sclk_io_num = CONFIG_SD_SPI_SCLK,
+        .mosi_io_num = SD_SPI_MOSI,
+        .miso_io_num = SD_SPI_MISO,
+        .sclk_io_num = SD_SPI_SCLK,
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
         .max_transfer_sz = 4000,
@@ -30,7 +35,7 @@ bool sd_mount_init(void)
     }
 
     sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-    slot_config.gpio_cs = CONFIG_SD_SPI_CS;
+    slot_config.gpio_cs = SD_SPI_CS;
     slot_config.host_id = host.slot;
 
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
