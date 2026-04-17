@@ -18,7 +18,8 @@ esp_err_t mdns_service_start(void)
 
     mdns_hostname_set(hostname);
     mdns_instance_name_set(instance_name);
-    mdns_service_add("ESP32-WebServer", "_http", "_tcp", 80, NULL, 0);
+    //mdns_service_add("ESP32-WebServer", "_http", "_tcp", 80, NULL, 0);
+    mdns_service_add("gate", "_gatecontrol", "_tcp", 80, NULL, 0);  // for app
 
     ESP_LOGI(TAG, "mDNS started with hostname: %s.local, instance: %s", hostname, instance_name);
     return ESP_OK;
