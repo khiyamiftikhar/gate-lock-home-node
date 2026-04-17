@@ -28,6 +28,7 @@
 #include "user_output.h"
 #include "user_request.h"
 #include "logger.h"
+#include "time_service.h"
 
 
 //#include "mdns_service.h"
@@ -124,8 +125,7 @@ void app_main(void)
 
     routine_handler_init();
 
-    log_capture_init();
-    sd_log_writer_start(4000);   // flush every 2 seconds, tune as needed
+    
 
 
     //wifi_init();
@@ -146,6 +146,9 @@ void app_main(void)
         while(proceed==false){
         vTaskDelay(pdMS_TO_TICKS(500));
     }
+
+    log_capture_init();
+    sd_log_writer_start(4000);   // flush every 2 seconds, tune as needed
 
     gui_interface->gui_inform(SYSTEM_WIFI_STA_CONNECTED,NULL);
     ret=mdns_service_start();
@@ -265,6 +268,8 @@ void app_main(void)
 
 
     esp_err_t ota_err=ota_service_init();
+
+    time_service_sync_async(NULL);   //trigger time sync, but no need to be informed when it is done because time service will handle retries and all internally and also time is only used for log timestamp which is not critical
 
 //    ota_process_start();
 
