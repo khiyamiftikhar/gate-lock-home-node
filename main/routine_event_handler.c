@@ -45,7 +45,7 @@ static TaskHandle_t delegate_task_handle=NULL;
 ///It was delegated by the event handler to the task context
 
 static void delegated_to_task_send_log(void *arg, size_t len){
-    log_snapshot_t snap={0};
+    log_snapshot_t snap = { .initialized = true, .cursor = 0 };
     char buffer[256];       //Same as the temp buffer in log_capture.c, not neat, need to have some consistent way later
     size_t bytes_read;
     esp_err_t ret=0;

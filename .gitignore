@@ -7,3 +7,12 @@ downloads/
 ota-service/modeling
 build*
 apps*
+dependencies.lock
+.clangd
+components/ota-service/cert/ca_cert_backup.pem
+components/ota-service/cert/full_chain.txt
+components/ota-service/cert/github-io.pem
+components/ota-service/cert/github-io2.pem
+components/user_input_not_used/
+components/user_output_not_used/
+git_last_branch

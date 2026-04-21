@@ -10,7 +10,7 @@ dependencies:
   discovery-interface:
     git: https://github.com/khiyamiftikhar/espnow-components
     path: discovery-interface
-    #version: development/use-remote-links
+    
   esp-now-comm:
     git: https://github.com/khiyamiftikhar/espnow-components
     path: esp-now-comm
@@ -18,7 +18,7 @@ dependencies:
   discovery_service:
     git: https://github.com/khiyamiftikhar/espnow-components
     path: discovery_service
-    #version: development/use-remote-links
+    version: fix/timer-name-conflict
   message_service:
     git: https://github.com/khiyamiftikhar/espnow-components
     path: message_service
@@ -40,3 +40,7 @@ dependencies:
   log-capture:
     git: https://github.com/khiyamiftikhar/log-capture
     version: fix/log-timestamp-fix
+
+
+
+  
