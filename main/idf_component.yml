@@ -30,7 +30,7 @@ dependencies:
 
   wifi-smartconfig:
     git: https://github.com/khiyamiftikhar/wifi-smartconfig
-    version: fix/power-outage-behavior
+    #version: fix/power-outage-behavior
   event-adapter:
     git: https://github.com/khiyamiftikhar/event-adapter
 
