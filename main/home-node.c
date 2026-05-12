@@ -39,13 +39,14 @@
 #define     ESPNOW_ENABLE_LONG_RANGE    1
 static const char* TAG="main gate";
 
-//static const uint8_t gate_node_mac[]={0xe4,0x65,0xb8,0x1b,0x1c,0xd8};
+static const uint8_t gate_node_test_mac[]={0xe4,0x65,0xb8,0x1b,0x1c,0xd8};
 //static const uint8_t gate_node_mac[]={0xcc,0xdb,0xa7,0x49,0xee,0x14};
 static const uint8_t gate_node_mac[]={0x24,0x0a,0xc4,0x5f,0x8a,0x90};
 
 static bool proceed=false;
 
 #define GATE_NODE_ID        2
+#define GATE_NODE_TEST_ID   3
 
 
 static esp_err_t get_gate_node_mac(uint8_t* mac){
@@ -179,6 +180,7 @@ void app_main(void)
 
     peer_registry_interface_t* peer_registry=peer_registry_init(&registry_config);
     peer_registry->peer_registry_add_peer(GATE_NODE_ID,gate_node_mac,"gatenode");
+    peer_registry->peer_registry_add_peer(GATE_NODE_TEST_ID,gate_node_test_mac,"gatenode-test");
     
 
     if(peer_registry==NULL)
@@ -193,6 +195,7 @@ void app_main(void)
     esp_now_trasnsport_discovery_package_t* discovery_interface=esp_now_transport_get_discovery_interface();
     //This interface struct contaains complete package required by message service
     discovery_interface->peer_manager_interface.esp_now_transport_add_peer(gate_node_mac);
+    discovery_interface->peer_manager_interface.esp_now_transport_add_peer(gate_node_test_mac);
     
     database_interface_t database_interface = {.is_white_listed=peer_registry->peer_registry_exists_by_mac};
 
